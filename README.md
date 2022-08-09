@@ -11,5 +11,5 @@ Projeto desenvolvido na linguagem funcional Haskell para disciplina de Paradigma
         $ sudo apt-get install gtk2.0
 3. Execute o comando para rodar o programa
 
-        stack run
+        $ stack run
       
