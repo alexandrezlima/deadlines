@@ -1,49 +1,66 @@
-{-# LANGUAGE OverloadedLabels  #-}
-{-# LANGUAGE OverloadedStrings #-}
+-- {-# LANGUAGE OverloadedLabels  #-}
+-- {-# LANGUAGE OverloadedStrings #-}
+-- {-# LANGUAGE PackageImports #-}
 
 module Main where
 
-import GI.Gtk as Gtk
+import Lib
+import Data.IORef
+import Control.Monad
+
+import Graphics.UI.Gtk
+import Graphics.UI.Gtk.Builder
+import Data.String
+import Control.Monad.IO.Class (MonadIO(liftIO))
+--import Data.Text.Read
+--import Text.Printf (printf)
+
+{- 
+    Requer um builder, que tem a referência do .glade.
+    A primeira string corresponde ao nome da label.
+    A segunda string corresponde ao novo nome da label.
+    Retorna uma IO Label
+-}
+getLabelObject :: Builder -> String -> String -> IO Label
+getLabelObject b s n = do
+    label <- builderGetObject b castToLabel s
+    labelSetLabel label n
+    return label
+
+createCompromisso :: String -> String -> String -> String -> String -> IO Frame
+createCompromisso a b c d e = do
+    builder <- builderNew
+    builderAddFromFile builder "ui_compromisso.glade"
+    title           <- getLabelObject builder "titulo"          a
+    date            <- getLabelObject builder "data"            b
+    remainingTime   <- getLabelObject builder "temporestante"   c
+    weekDay         <- getLabelObject builder "diadasemana"     d
+    description     <- getLabelObject builder "descricao"       e
+    --button <- builderGetObject builder castToButton "button1"
+    --onClicked button $ do putStrLn k
+
+    builderGetObject builder castToFrame "frame1"
+    where
+        k = a ++ " test"
 
 main :: IO ()
 main = do
-    Gtk.init Nothing
+    initGUI
+    builder <- builderNew
+    builderAddFromFile builder "ui.glade"
+    window <- builderGetObject builder castToWindow "mainWindow"
 
-    window <- Gtk.windowNew Gtk.WindowTypeToplevel
-    Gtk.setContainerBorderWidth window 10
+   -- window' <- createCompromisso "compromisso a" "data a" "tempo restante a" "dia da semana a" "descrição a"
+   -- window'' <- createCompromisso "compromisso b" "data b" "tempo restante b" "dia da semana b" "descrição b"
+    --hbox <- builderGetObject builder castToVScrollbar "vscrollbar"
 
-    Gtk.setWindowTitle window "deadlines"
+    --button <- builderGetObject builder castToButton "button1"
+    widgetShowAll window
 
-    Gtk.setWindowDefaultWidth   window 750
-    Gtk.setWindowDefaultHeight  window 300
+    --Exemplo de como capturar a ação de um botão do submenu. Note que no glade tivemos que associar uma nova ação ao item.
+    action <- builderGetObject builder castToAction "action1"
+    onActionActivate action $ do (putStrLn "test")
 
-    Gtk.onWidgetDestroy window Gtk.mainQuit
+    on window deleteEvent $ liftIO mainQuit >> return False
 
-
-
-    image1 <- Gtk.imageNewFromFile $ "./images/discordqr.png"
-
-    btn1 <- Gtk.buttonNew
-    Gtk.buttonSetImage btn1  $ Just image1
-    Gtk.buttonSetRelief btn1 Gtk.ReliefStyleNone
-    Gtk.widgetSetHexpand btn1 False --evita que haja expansão vertical do botão (height)
-    Gtk.on btn1 #clicked $ do
-                        putStrLn "Teste!"
-                        Gtk.widgetDestroy window
-
-
-    grid <- Gtk.gridNew
-    Gtk.gridSetColumnSpacing grid 10
-    Gtk.gridSetRowSpacing grid 10
-    Gtk.gridSetColumnHomogeneous grid True
-                    --os primeiros 2 valores são as coordenadas x e y.
-                    --os segundos 2 valores são quantas linhas e colunas o widget deve ocupar.
-    #attach grid btn1 0 0 1 1
-
-    #add window grid
-
-
-    #showAll window
-    Gtk.main
-
--- attacTo :: 
+    mainGUI

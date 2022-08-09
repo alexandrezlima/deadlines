@@ -35,8 +35,13 @@ packages:
 # These entries can reference officially published versions as well as
 # forks / in-progress versions pinned to a git hash. For example:
 #
-# extra-deps:
-# - acme-missiles-0.3
+extra-deps:
+#- glade-0.13.1
+- gtk-0.15.7
+- glib-0.13.8.2
+- cairo-0.13.8.2
+- gio-0.13.8.2
+- pango-0.13.8.2
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
