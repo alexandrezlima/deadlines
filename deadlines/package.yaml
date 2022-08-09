@@ -25,6 +25,10 @@ dependencies:
 - gi-gtk-hs
 - haskell-gi-base
 - gi-gtk
+- cassava
+- vector
+- text
+- bytestring
 
 library:
   source-dirs: src
