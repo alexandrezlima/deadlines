@@ -6,6 +6,7 @@
   <object class="GtkWindow" id="mainWindow">
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">deadlines.</property>
+    <property name="window_position">center</property>
     <child>
       <object class="GtkFixed" id="fixed1">
         <property name="width_request">800</property>
@@ -29,6 +30,20 @@
                   <object class="GtkFixed" id="fixed2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkButton" id="button1">
+                        <property name="label" translatable="yes">teste add novo compromisso</property>
+                        <property name="width_request">244</property>
+                        <property name="height_request">80</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="receives_default">True</property>
+                      </object>
+                      <packing>
+                        <property name="x">24</property>
+                        <property name="y">128</property>
+                      </packing>
+                    </child>
                   </object>
                 </child>
               </object>

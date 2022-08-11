@@ -27,6 +27,12 @@ getLabelObject b s n = do
     labelSetLabel label n
     return label
 
+data Teste = Teste {
+                      a :: Int
+                    , b :: Int
+                    , c :: Int
+                    }
+
 createCompromisso :: String -> String -> String -> String -> String -> IO Frame
 createCompromisso a b c d e = do
     builder <- builderNew
@@ -50,17 +56,29 @@ main = do
     builderAddFromFile builder "ui.glade"
     window <- builderGetObject builder castToWindow "mainWindow"
 
+
    -- window' <- createCompromisso "compromisso a" "data a" "tempo restante a" "dia da semana a" "descrição a"
    -- window'' <- createCompromisso "compromisso b" "data b" "tempo restante b" "dia da semana b" "descrição b"
     --hbox <- builderGetObject builder castToVScrollbar "vscrollbar"
 
-    --button <- builderGetObject builder castToButton "button1"
+    button <- builderGetObject builder castToButton "button1"
+
+    onClicked button $ do addCompromisso
+
     widgetShowAll window
 
     --Exemplo de como capturar a ação de um botão do submenu. Note que no glade tivemos que associar uma nova ação ao item.
     action <- builderGetObject builder castToAction "action1"
     onActionActivate action $ do (putStrLn "test")
 
+
     on window deleteEvent $ liftIO mainQuit >> return False
 
     mainGUI
+
+addCompromisso :: IO ()
+addCompromisso = do
+    builder <- builderNew
+    builderAddFromFile builder "./ui/newCompromisso.glade"
+    novoCompromisso <- builderGetObject builder castToDialog "newCompromissoWindow"
+    widgetShow novoCompromisso
