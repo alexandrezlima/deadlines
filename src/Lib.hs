@@ -20,6 +20,8 @@ import qualified Data.Vector as V
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 
+import Graphics.UI.Gtk
+
 --Importado para ser usado no Cassanva.decodeByName
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
@@ -41,7 +43,7 @@ data Prefs =
 data Category =
   Cat
     { catName :: Text
-    , color :: String
+    , catColor :: String
     }
 
 data Event =
@@ -53,12 +55,12 @@ data Event =
     , description :: Text
     , category :: Text
     , recurrent :: Bool
---    , color :: CorSrc
+    , color :: ColorSrc
     }
   deriving (Eq, Show)
 
 -- ADT que indica a fonte de onde o evento recebe sua cor. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixa para a cor ser ajustada automaticamente conforme a data se aproxima.
-data ColorSrc = Custom Color | Category | Gradient
+data ColorSrc = Custom Color | Category | Gradient deriving (Eq, Show)
 
 -- Para o Cassava decodificar os registros, eles tem que ser instância de FromRecord (sem Header) ou FromNamedRecord (com Header)
 instance FromNamedRecord Event where
@@ -71,7 +73,7 @@ instance FromNamedRecord Event where
       <*> m .: "description"
       <*> m .: "category"
       <*> m .: "recurrent"
---      <*> m .: "color"
+      <*> m .: "color"
 
 -- Usado para o Cassava saber como ler o que vem do CSV e transformar em booleano
 instance FromField Bool where
@@ -81,39 +83,57 @@ instance FromField Bool where
   --parseField otherType =
   --  pure False
   parseField field
-    | field == "True" = True
-    | otherwise       = False
+    | field == "True" = pure True
+    | otherwise       = pure False
 
 instance FromField ColorSrc where
   parseField "Category" = pure Category
   parseField "Gradient" = pure Gradient
---  parseField color = (Custom )
+--TODO:  parseField color = Custom color
 
 -- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header). Se o ADT tiver um outro ADT dentro dele, tbm é necessário 
 instance ToNamedRecord Event where
   toNamedRecord Item{..} =
     Cassava.namedRecord
-      -- noCSV .= noADT
-      [ "nome" .= name
-      , "data" .= date
-      , "desc" .= description
+      -- noCSV        .= noADT
+      [ "name"        .= name
+      , "day"         .= day
+      , "month"       .= month
+      , "year"        .= year
+      , "description" .= description
+      , "category"    .= category
+      , "recurrent"   .= recurrent
+      , "color"       .= color
       ]
+
+instance ToField Bool where
+  toField True  = "True"
+  toField False = "False"
+
+instance ToField ColorSrc where
+  toField Gradient = "Gradient"
+  toField Category = "Category"
 
 -- Diz para o Cassava a ordem padrão do meu Header
 instance DefaultOrdered Event where
   headerOrder _ =
     Cassava.header
-      [ "nome"
-      , "data"
-      , "desc"
+      [ "name"
+      , "day"
+      , "month"
+      , "year"
+      , "description"
+      , "category"
+      , "recurrent"
+      , "color"
       ]
 
 -- Tem que por aqui o que estiver escrito no CSV
 eventHeader :: Header
-eventHeader = Vector.fromList ["nome", "data", "desc"]
+eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "category", "recurrent", "color"]
 
-mkEvent :: Text -> Text -> Text -> Event
-mkEvent name date desc = Item {name = name, date = date, description = desc}
+mkEvent :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
+mkEvent n d m y desc cat re c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, color = c}
 
 -- Dado que tenho um Header fixo, a função codifica o ADT para o formato csv
 encodeEvent :: [Event] -> ByteString
@@ -153,15 +173,19 @@ catchShowIO action =
     handleIOException = return . Left . show
 
 testrecord :: ByteString
-testrecord = "nome,data,desc\namanha,01/01/2022,insert description\n"
+testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
 
 eventrecord :: Event
 eventrecord =
-    Item {
-        name = "depoisDeAmanha",
-        date = "02/01/2022",
-        description = "insert desc"
-    }
+  Item { name     = "depoisDeAmanha"
+    , day         = 02
+    , month       = 01
+    , year        = 2022
+    , description = "insert desc"
+    , category    = "none"
+    , recurrent   = False
+    , color       = Gradient
+  }
 
 main = do
   --Tutorial de 2 segundos na pag inicial da biblioteca
@@ -173,12 +197,13 @@ main = do
 
   -- Alguns testes que fui fazendo pra ver como funciona
   --Testei construindo os eventos na mão
-  let registro = Cassava.decodeByName "nome,data,desc\n\
-                                       \amanha,01/01/2022,insert description\n"
-                                         :: Either String (Header, Vector Event)
+  --let registro = Cassava.decodeByName "name,day,month,year,description,category,\
+  --                                    \recurrent,color\namanha,01,01,2022,insert \
+  --                                    \description,none,False,Gradient\n"
+  --                                      :: Either String (Header, Vector Event)
 
   -- Consigo decodificar com a função auxiliar e construindo o evento na mão
-  let segundoRegistro = decodeEvents "nome,data,desc\namanha,01/01/2022,insert description\n"
+  --let segundoRegistro = decodeEvents "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
 
   -- Consigo decodificar o csv com a função auxiliar e o evento que tinha deixado pronto
   let registro3 = decodeEvents testrecord
@@ -194,8 +219,8 @@ main = do
 
   encodeEventsToFile "./csv/codificado.csv" vec
 
-  print registro
-  print segundoRegistro
+  --print registro
+  --print segundoRegistro
   print registro3
   print registro4
   print cod1
