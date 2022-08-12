@@ -3,8 +3,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Lib
-    (
-    ) where
+  (
+  ) where
 
 import Control.Exception (IOException)
 import qualified Control.Exception as Exception
@@ -33,21 +33,61 @@ instance ToField adtName
 
 Para o cassava saber como transformar esse ADT em uma parte do registro csv e vice versa
 -}
+data Prefs =
+  Prefs
+    { autodelete :: Bool
+    }
+
+data Category =
+  Cat
+    { catName :: Text
+    , color :: String
+    }
+
 data Event =
-    Item
-        { name :: Text
-        , date :: Text
-        , description :: Text
-        }
-    deriving (Eq, Show)
+  Item
+    { name :: Text
+    , day :: Int
+    , month :: Int
+    , year :: Int
+    , description :: Text
+    , category :: Text
+    , recurrent :: Bool
+--    , color :: CorSrc
+    }
+  deriving (Eq, Show)
+
+-- ADT que indica a fonte de onde o evento recebe sua cor. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixa para a cor ser ajustada automaticamente conforme a data se aproxima.
+data ColorSrc = Custom Color | Category | Gradient
 
 -- Para o Cassava decodificar os registros, eles tem que ser instância de FromRecord (sem Header) ou FromNamedRecord (com Header)
 instance FromNamedRecord Event where
-    parseNamedRecord m =
-        Item
-            <$> fmap Text.decodeLatin1 (m .: "nome")
-            <*> m .: "data"
-            <*> m .: "desc"
+  parseNamedRecord m =
+    Item
+      <$> fmap Text.decodeLatin1 (m .: "name")
+      <*> m .: "day"
+      <*> m .: "month"
+      <*> m .: "year"
+      <*> m .: "description"
+      <*> m .: "category"
+      <*> m .: "recurrent"
+--      <*> m .: "color"
+
+-- Usado para o Cassava saber como ler o que vem do CSV e transformar em booleano
+instance FromField Bool where
+  --parseField "True" =
+  --  pure True
+
+  --parseField otherType =
+  --  pure False
+  parseField field
+    | field == "True" = True
+    | otherwise       = False
+
+instance FromField ColorSrc where
+  parseField "Category" = pure Category
+  parseField "Gradient" = pure Gradient
+--  parseField color = (Custom )
 
 -- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header). Se o ADT tiver um outro ADT dentro dele, tbm é necessário 
 instance ToNamedRecord Event where
