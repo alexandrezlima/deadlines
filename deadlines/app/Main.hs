@@ -38,7 +38,7 @@ data Teste = Teste {
 createCompromisso :: String -> String -> String -> String -> String -> IO Frame
 createCompromisso a b c d e = do
     builder <- builderNew
-    builderAddFromFile builder "./ui/ui_compromisso.glade"
+    builderAddFromFile builder "./ui/UI_compromisso.glade"
     title           <- getLabelObject builder "titulo"          a
     date            <- getLabelObject builder "data"            b
     remainingTime   <- getLabelObject builder "temporestante"   c
@@ -55,7 +55,7 @@ main :: IO ()
 main = do
     initGUI
     builder <- builderNew
-    builderAddFromFile builder "./ui/MainUI.glade"
+    builderAddFromFile builder "./ui/UI_main.glade"
     window <- builderGetObject builder castToWindow "mainWindow"
 
 
@@ -81,6 +81,6 @@ main = do
 addCompromisso :: IO ()
 addCompromisso = do
     builder <- builderNew
-    builderAddFromFile builder "./ui/newCompromisso.glade"
+    builderAddFromFile builder "./ui/UI_newCompromisso.glade"
     novoCompromisso <- builderGetObject builder castToDialog "newCompromissoWindow"
     widgetShow novoCompromisso
