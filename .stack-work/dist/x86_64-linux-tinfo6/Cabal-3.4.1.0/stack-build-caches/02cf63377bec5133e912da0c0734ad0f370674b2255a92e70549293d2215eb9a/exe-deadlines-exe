@@ -1,0 +1,18 @@
+/home/tiago/repos/deadlines/deadlines/ChangeLog.md:
+  hash: b1acf46840ccf2bdd7649af7cd0cd1bd4c79b193a5be4b3113a3331295492c32
+/home/tiago/repos/deadlines/deadlines/app/Main.hs:
+  hash: 21ad841b2e4f45a1592bdfd48bc151aae4a3044c0278a3d2182ec9a03568649e
+/home/tiago/.stack/programs/x86_64-linux/ghc-tinfo6-9.0.2/lib/ghc-9.0.2/include/ghcversion.h:
+  hash: b6281754d6dc5c5462a97f01fbffb615a7d9f031384e8e8250fce23e8f43f266
+? /home/tiago/repos/deadlines/deadlines/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.4.1.0/build/deadlines-exe/autogen/Paths_deadlines.hs
+: hash: ce50bcff35cd940007a7c8a9f6c3812625cc035a40c89ce84c23927b21e8f8df
+/usr/include/stdc-predef.h:
+  hash: cb08cd5d4cc059a90833ac48a284d25016e8d56ded8ad4cd98d8ac59cc5053f3
+? /home/tiago/repos/deadlines/deadlines/.stack-work/dist/x86_64-linux-tinfo6/Cabal-3.4.1.0/build/deadlines-exe/autogen/cabal_macros.h
+: hash: ff6689d6e2b6de158e33d5bf1c0aadb4f54b6701f7a0fab62ffe5c98785d0515
+/home/tiago/repos/deadlines/deadlines/deadlines.cabal:
+  hash: 2b3350651ca916e80a8a15421bf9aff2f97db1a5da4c9cd502e5bf7b01a9e4b9
+/home/tiago/repos/deadlines/deadlines/package.yaml:
+  hash: 90b4fd0dd49cd174b1de1810afa2beb4f1f860a1fd74d7bb9b07d213b6aa99a3
+/home/tiago/repos/deadlines/deadlines/README.md:
+  hash: da8765af938a1d63593c06f13326b436c1c5e177b6771ec734ce881552e88e13
