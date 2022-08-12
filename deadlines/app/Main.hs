@@ -27,11 +27,13 @@ getLabelObject b s n = do
     labelSetLabel label n
     return label
 
+--A definição abaixo cria automaticamente as funções ayyyy byyyy e cyyyy. Assim, ao fazer Teste ayyyy ele vai pegar o int que tá em ayyyy...
 data Teste = Teste {
-                      a :: Int
-                    , b :: Int
-                    , c :: Int
+                      ayyyy :: Int
+                    , byyyy :: Int
+                    , cyyyy :: Int
                     }
+
 
 createCompromisso :: String -> String -> String -> String -> String -> IO Frame
 createCompromisso a b c d e = do
