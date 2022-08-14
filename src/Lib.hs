@@ -3,6 +3,34 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+{-
+ADTS:
+Prefs
+Category
+Event
+ColorSrc
+
+Quando quiser acessar um arquivos csv's do projeto:
+categoryPath :: FilePath
+eventPath    :: FilePath
+
+Funções úteis:
+getEvents          :: IO [Event]
+insertToFile       :: FilePath -> Event -> IO (Either String ())
+encodeEventsToFile :: FilePath -> [Event] -> IO (Either String ())
+
+mkCategory :: Text -> Text -> Category
+mkEvent    :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
+
+filterEvents       :: Eq a => a -> (Event -> a) -> [Event] -> [Event]
+filterEventsByCat  :: Text -> [Event] -> [Event]
+filterCloseEvents  :: Int -> Int -> Int -> [Event] -> [Event]
+filterDistantEvets :: Int -> Int -> Int -> [Event] -> [Event]
+filterEventName    :: Text -> [Event] -> [Event]
+filterHasDesc      :: [Event] -> [Event]
+filterIsReg        :: [Event] -> [Event]
+-}
+
 module Lib where
 
 import Control.Exception (IOException)
@@ -247,7 +275,7 @@ filterHasDesc :: [Event] -> [Event]
 filterHasDesc es = [e | e <- es, description e /= ""]
 
 -- Filtra a lita de Eventos passada como parametro e devolve apenas eventos que tem são recorrentes
-filterIsReg ::[Event] -> [Event]
+filterIsReg :: [Event] -> [Event]
 filterIsReg es = [e | e <- es, recurrent e]
 
 testrecord :: ByteString
