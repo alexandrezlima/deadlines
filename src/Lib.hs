@@ -10,12 +10,16 @@ Category
 Event
 ColorSrc
 
-Quando quiser acessar um arquivos csv's do projeto:
+Variaveis úteis:
+
 categoryPath :: FilePath
 eventPath    :: FilePath
 
+today :: IO (Integer, Int, Int)
+
 Funções úteis:
 
+daysleft :: Int -> Int -> Integer -> Day -> Integer
 dateToWeekDay :: Int -> Int -> Int -> String
 
 getEvents          :: IO [Event]
@@ -55,6 +59,9 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Either
 
+import Data.Time.Clock
+import Data.Time.Calendar
+
 -- DataType que representa um registro do meu csv
 {-
 Se ouvesse um ADT customizado aqui, ao inves de 'Text',
@@ -70,6 +77,14 @@ categoryPath = "./csv/categories.csv"
 
 eventPath :: FilePath
 eventPath = "./csv/events.csv"
+
+-- Devolve o (ano, mes, dia)
+today :: IO (Integer, Int, Int)
+today = getCurrentTime >>= return . toGregorian . utctDay
+
+-- Em tese, se passar dia, mes, ano e o today aqui em cima é pra calcular quantos dias faltam
+daysleft :: Int -> Int -> Integer -> Day -> Integer
+daysleft d m y = diffDays (fromGregorian y m d)
 
 data Prefs =
   Prefs
@@ -125,14 +140,14 @@ instance FromNamedRecord Event where
 
 -- Usado para o Cassava saber como ler o que vem do CSV e transformar em booleano
 instance FromField Bool where
-  parseField "True" =  pure True
+  parseField "True" = pure True
   parseField _      = pure False
 
 -- Usado para o Cassava saber como ler o que esta escrito no CSV e transformar no meu ADT de Cor. Se a string que estiver nesse campo não for 'Category' nem 'Gradient, ela sera um código hexadecimal, que sera transferido para minha cor Custom.
 instance FromField ColorSrc where
   parseField "Category" = pure CatName
   parseField "Gradient" = pure Gradient
-  parseField othertype = Custom <$> parseField othertype
+  parseField othertype  = Custom <$> parseField othertype
 
 instance ToNamedRecord Category where
   toNamedRecord Category{..} =
@@ -237,12 +252,11 @@ insertToFile :: FilePath -> Event -> IO (Either String ())
 insertToFile filePath newEvent = do
   eventVec <- file
   let eventList = Foldable.toList eventVec ++ [newEvent]
-  --let newVec = Vector.cons event eventVec
   -- Não sei pq mas sem esse print o encode retorna que o arquivo ta bloqueado
   print eventVec
   encodeEventsToFile filePath eventList
   where
-    -- Desenvolopo o vetor do Either
+    -- Desenvelopo o vetor do Either
     file :: IO (Vector Event)
     file = do
         fileRead <- decodeEventsFromFile filePath
@@ -347,7 +361,9 @@ main = do
 
   _ <- encodeEventsToFile "./csv/codificado.csv" $ Foldable.toList vec
 
-  registro5 <- insertToFile "./csv/codificadoooo.csv" eventrecord
+  --registro5 <- insertToFile "./csv/codificadoooo.csv" eventrecord
+
+  let dia = dateToWeekDay 14 8 2022
 
   --print registro
   --print segundoRegistro
@@ -355,4 +371,5 @@ main = do
   print registro4
   print cod1
   print cod2
-  print registro5
+--  print registro5
+  print dia
