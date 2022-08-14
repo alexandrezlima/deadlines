@@ -44,18 +44,33 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkVBox" id="vbox1">
-                        <property name="width_request">766</property>
-                        <property name="height_request">380</property>
+                      <object class="GtkNotebook" id="switcherMain">
+                        <property name="width_request">583</property>
+                        <property name="height_request">289</property>
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="homogeneous">True</property>
+                        <property name="can_focus">True</property>
                         <child>
+                          <placeholder/>
+                        </child>
+                        <child type="tab">
+                          <placeholder/>
+                        </child>
+                        <child>
+                          <placeholder/>
+                        </child>
+                        <child type="tab">
+                          <placeholder/>
+                        </child>
+                        <child>
+                          <placeholder/>
+                        </child>
+                        <child type="tab">
                           <placeholder/>
                         </child>
                       </object>
                       <packing>
-                        <property name="y">62</property>
+                        <property name="x">46</property>
+                        <property name="y">106</property>
                       </packing>
                     </child>
                   </object>
