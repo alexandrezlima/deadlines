@@ -19,7 +19,7 @@ today :: IO (Integer, Int, Int)
 
 Funções úteis:
 
-daysleft :: Event -> Day -> Integer
+daysleft :: Event -> Day -> Int
 dateToWeekDay :: Int -> Int -> Int -> String
 
 getEvents          :: IO [Event]
@@ -79,22 +79,27 @@ eventPath :: FilePath
 eventPath = "./csv/events.csv"
 
 -- Devolve o (ano, mes, dia)
-today :: IO (Integer, Int, Int)
-today = getCurrentTime >>= return . toGregorian . utctDay
+getToday :: IO (Integer, Int, Int)
+getToday = getCurrentTime >>= return . toGregorian . utctDay
 
 -- Recebe um evento e o dia de hoje, e calcula quantos dias faltam para o evento
-daysleft :: Event -> Day -> Int
+daysleft :: Event -> (Integer, Int, Int) -> Int
 daysleft e t =
   if recurrent e then
-    fromInteger $ diffDays (fromGregorian y m d) t
+    fromInteger $ diffDays (fromGregorian y m d) today
   else
     fromInteger nextDay
   where
     d = day e
     m = month e
     y = toInteger $ year e
+    -- Extraindo da triple
+    fst3 (a, _, _) = a
+    snd3 (_, b, _) = b
+    trd3 (_, _, c) = c
+    today = fromGregorian (fst3 t) (snd3 t) (trd3 t)
     -- Caso seja um evento regular
-    dl      = diffDays (fromGregorian y m d) t
+    dl      = diffDays (fromGregorian y m d) today
     reg     = toInteger $ regularity e
     --                  floor          + reg
     nextDay = (abs dl `div` reg) * reg + reg
