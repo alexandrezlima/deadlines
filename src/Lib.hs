@@ -83,8 +83,20 @@ today :: IO (Integer, Int, Int)
 today = getCurrentTime >>= return . toGregorian . utctDay
 
 -- Em tese, se passar dia, mes, ano e o today aqui em cima é pra calcular quantos dias faltam
-daysleft :: Int -> Int -> Integer -> Day -> Integer
-daysleft d m y = diffDays (fromGregorian y m d)
+daysleft :: Event -> Day -> Integer
+daysleft e t =
+  if recurrent e then
+    diffDays (fromGregorian y m d) t
+  else
+    nextDay
+  where
+    d = day e
+    m = month e
+    y = year e
+    -- Caso seja um evento regular
+    dl = diffDays (fromGregorian y m d) t
+    reg = regularity e
+    nextDay= (dl `div` reg) * reg + reg
 
 data Prefs =
   Prefs
@@ -102,10 +114,11 @@ data Event =
     { name :: Text
     , day :: Int
     , month :: Int
-    , year :: Int
+    , year :: Integer
     , description :: Text
     , category :: Text
     , recurrent :: Bool
+    , regularity :: Integer
     , color :: ColorSrc
     }
   deriving (Eq, Show)
@@ -136,6 +149,7 @@ instance FromNamedRecord Event where
       <*> m .: "description"
       <*> m .: "category"
       <*> m .: "recurrent"
+      <*> m .: "regularity"
       <*> m .: "color"
 
 -- Usado para o Cassava saber como ler o que vem do CSV e transformar em booleano
@@ -181,7 +195,15 @@ instance ToField ColorSrc where
   toField CatName       = "Category"
   toField (Custom text) = toField text
 
--- Diz para o Cassava a ordem padrão do meu Header
+-- Diz para o Cassava a ordem padrão do header das categorias
+instance DefaultOrdered Category where
+  headerOrder _ =
+    Cassava.header
+      [ "catname"
+      , "catcolor"
+      ]
+
+-- Diz para o Cassava a ordem padrão do meu Header de Events
 instance DefaultOrdered Event where
   headerOrder _ =
     Cassava.header
@@ -192,6 +214,7 @@ instance DefaultOrdered Event where
       , "description"
       , "category"
       , "recurrent"
+      , "regularity"
       , "color"
       ]
 
@@ -201,13 +224,13 @@ categoryHeader = Vector.fromList ["catname", "catcolor"]
 
 -- Tem que por aqui o que estiver escrito no CSV
 eventHeader :: Header
-eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "category", "recurrent", "color"]
+eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "category", "recurrent", "regularity", "color"]
 
 mkCategory :: Text -> Text -> Category
 mkCategory n c = Category {catName = n, catColor = c}
 
-mkEvent :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
-mkEvent n d m y desc cat re c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, color = c}
+mkEvent :: Text -> Int -> Int -> Integer -> Text -> Text -> Bool -> Integer -> ColorSrc -> Event
+mkEvent n d m y desc cat re reg c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, regularity = reg, color = c}
 
 -- Dado que tenho um Header fixo, a função codifica o ADT para o formato csv
 encodeEvent :: [Event] -> ByteString
@@ -276,11 +299,11 @@ filterEventsByCat :: Text -> [Event] -> [Event]
 filterEventsByCat catname = filterEvents catname category
 
 -- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão ANTES do dia informado
-filterCloseEvents :: Int -> Int -> Int -> [Event] -> [Event]
+filterCloseEvents :: Int -> Int -> Integer -> [Event] -> [Event]
 filterCloseEvents d m y es = [e | e <- es, (year e < y) || (year e == y && month e < m) || (year e == y && month e == m && day e < d) ]
 
 -- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão DEPOIS do dia informado
-filterDistantEvets :: Int -> Int -> Int -> [Event] -> [Event]
+filterDistantEvets :: Int -> Int -> Integer -> [Event] -> [Event]
 filterDistantEvets d m y es = [e | e <- es, (year e > y) || (year e == y && month e > m) || (year e == y && month e == m && day e > d) ]
 
 -- Filtra a lita de Eventos passada como parametro e devole aqueles que cuja substring de argumento está presente no nome do evento
@@ -325,6 +348,7 @@ eventrecord =
     , description = "insert desc"
     , category    = "none"
     , recurrent   = False
+    , regularity  = 0
     , color       = Custom "#EEEEEE"
   }
 
