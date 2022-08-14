@@ -82,21 +82,22 @@ eventPath = "./csv/events.csv"
 today :: IO (Integer, Int, Int)
 today = getCurrentTime >>= return . toGregorian . utctDay
 
--- Em tese, se passar dia, mes, ano e o today aqui em cima é pra calcular quantos dias faltam
-daysleft :: Event -> Day -> Integer
+-- Recebe um evento e o dia de hoje, e calcula quantos dias faltam para o evento
+daysleft :: Event -> Day -> Int
 daysleft e t =
   if recurrent e then
-    diffDays (fromGregorian y m d) t
+    fromInteger $ diffDays (fromGregorian y m d) t
   else
-    nextDay
+    fromInteger nextDay
   where
     d = day e
     m = month e
-    y = year e
+    y = toInteger $ year e
     -- Caso seja um evento regular
-    dl = diffDays (fromGregorian y m d) t
-    reg = regularity e
-    nextDay= (dl `div` reg) * reg + reg
+    dl      = diffDays (fromGregorian y m d) t
+    reg     = toInteger $ regularity e
+    --                  floor          + reg
+    nextDay = (abs dl `div` reg) * reg + reg
 
 data Prefs =
   Prefs
@@ -114,11 +115,11 @@ data Event =
     { name :: Text
     , day :: Int
     , month :: Int
-    , year :: Integer
+    , year :: Int
     , description :: Text
     , category :: Text
     , recurrent :: Bool
-    , regularity :: Integer
+    , regularity :: Int
     , color :: ColorSrc
     }
   deriving (Eq, Show)
@@ -229,7 +230,7 @@ eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "c
 mkCategory :: Text -> Text -> Category
 mkCategory n c = Category {catName = n, catColor = c}
 
-mkEvent :: Text -> Int -> Int -> Integer -> Text -> Text -> Bool -> Integer -> ColorSrc -> Event
+mkEvent :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> Int -> ColorSrc -> Event
 mkEvent n d m y desc cat re reg c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, regularity = reg, color = c}
 
 -- Dado que tenho um Header fixo, a função codifica o ADT para o formato csv
@@ -299,11 +300,11 @@ filterEventsByCat :: Text -> [Event] -> [Event]
 filterEventsByCat catname = filterEvents catname category
 
 -- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão ANTES do dia informado
-filterCloseEvents :: Int -> Int -> Integer -> [Event] -> [Event]
+filterCloseEvents :: Int -> Int -> Int -> [Event] -> [Event]
 filterCloseEvents d m y es = [e | e <- es, (year e < y) || (year e == y && month e < m) || (year e == y && month e == m && day e < d) ]
 
 -- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão DEPOIS do dia informado
-filterDistantEvets :: Int -> Int -> Integer -> [Event] -> [Event]
+filterDistantEvets :: Int -> Int -> Int -> [Event] -> [Event]
 filterDistantEvets d m y es = [e | e <- es, (year e > y) || (year e == y && month e > m) || (year e == y && month e == m && day e > d) ]
 
 -- Filtra a lita de Eventos passada como parametro e devole aqueles que cuja substring de argumento está presente no nome do evento
@@ -361,39 +362,20 @@ main = do
     Right v -> Vector.forM_ v $ \ (col1, col2, col3) ->
       putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3
 
-  -- Alguns testes que fui fazendo pra ver como funciona
-  --Testei construindo os eventos na mão
-  --let registro = Cassava.decodeByName "name,day,month,year,description,category,\
-  --                                    \recurrent,color\namanha,01,01,2022,insert \
-  --                                    \description,none,False,Gradient\n"
-  --                                      :: Either String (Header, Vector Event)
-
-  -- Consigo decodificar com a função auxiliar e construindo o evento na mão
-  --let segundoRegistro = decodeEvents "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
-
   -- Consigo decodificar o csv com a função auxiliar e o evento que tinha deixado pronto
   let registro3 = decodeEvents testrecord
 
   -- Função que le um arquivo funcionando
   registro4 <-decodeEventsFromFile "./csv/teste.csv"
 
-  -- Se eu tenho um Header posso codificar para csv assim
-  let cod1 = encodeEvent [eventrecord, eventrecord]
-
   let vec = Vector.singleton eventrecord
   let cod2 = encodeEvent' $ Foldable.toList vec
 
   _ <- encodeEventsToFile "./csv/codificado.csv" $ Foldable.toList vec
 
-  --registro5 <- insertToFile "./csv/codificadoooo.csv" eventrecord
-
   let dia = dateToWeekDay 14 8 2022
 
-  --print registro
-  --print segundoRegistro
   print registro3
   print registro4
-  print cod1
   print cod2
---  print registro5
   print dia
