@@ -17,6 +17,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 
 import qualified Data.HashTable.IO as H
 import Data.Maybe
+import Data.Text
 
 
 --A definição abaixo cria automaticamente as funções ayyyy byyyy e cyyyy. Assim, ao fazer Teste ayyyy ele vai pegar o int que tá em ayyyy...
@@ -50,7 +51,7 @@ createEvent n = do
 --Hashtable verificado em github.com/gregorycollins/hashtables
 type HashTable a b = H.BasicHashTable a b
 
-makeHashTable :: IO (HashTable String Fixed)
+makeHashTable :: IO (HashTable String Builder)
 makeHashTable = do H.new
 
 {--
@@ -67,26 +68,43 @@ printHash ht s = do
 main :: IO ()
 main = do
     initGUI
+
+
+    --Builder para janela principal.
     builderMain <- makeBuilder "./ui/UI_main.glade"
+
+    --Janela principal, que comportará todos os outros elementos.
     window <- builderGetObject builderMain castToWindow "mainWindow"
+
+    --Switcher comporta todas as categorias que, por sua vez, contém os respectivos eventos.
+    switcher <- builderGetObject builderMain castToNotebook "switcherMain"
+    logo <- builderGetObject builderMain castToImage "imgLogo"
+    imageSetFromFile logo "./images/deadlines-RB.png"
 
     -- #IDEIA: ao ler o arquivo de categorias, chamar aqui a função create category para cada linha da tabela.
     --                  n <- createCategory "Nome da Categoria" categoriesMap switcher
     --                  talvez adicionar o parâmetro de cor? Depende de como podemos controlá-lo.
     -- Após adicionar todas as categorias, pegar o arquivo que lê todos os eventos, 
-    -- ir de categoria em categoria adicionando-os às suas correspondentes categorias.
+    -- ir de categoria em categoria adicionando-os às suas correspondentes categorias, usando insertEvent.
     
     --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
     categoriesMap <- makeHashTable
+    x <- createCategory "categoria teste" categoriesMap switcher
+    insertEvent (Item (pack "EventTeste 1") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
+    insertEvent (Item (pack "EventTeste 2") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
+    insertEvent (Item (pack "EventTeste 3") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
+    --Ideia para salvar e posteriormente carregar as configurações do usuário:
+    --      Ter funções de sort por propriedade. Isto é, ter uma função que
+    --      recebe uma lista, uma string que corresponde ao nome da coluna (ex: nome, data, etc)
+    --      retorna a mesma lista só que organizada de acordo com a propriedade fornecida.
+    --Na hora de popular a tabela, resta apenas passar o vetor organizado como parâmetro.
 
-    --Switcher comporta todas as categorias que, por sua vez, contém os respectivos eventos.
-    switcher <- builderGetObject builderMain castToNotebook "switcherMain"
+    
 
     --Para criar e adicionar uma nova categoria, basta chamar a função createCategory.
     --Tal função espera como parâmetro o nome da categoria, a hashtable e o parent.
-    n <- createCategory "Minha categoria 1" categoriesMap switcher
-    n <- createCategory "Minha categoria 2" categoriesMap switcher
-    n <- createCategory "Minha categoria 3" categoriesMap switcher
+    --Exemplo para criar a categoria:
+    --n <- createCategory "Minha categoria 1" categoriesMap switcher
 
    -- window' <- createCompromisso "compromisso a" "data a" "tempo restante a" "dia da semana a" "descrição a"
    -- window'' <- createCompromisso "compromisso b" "data b" "tempo restante b" "dia da semana b" "descrição b"
@@ -104,9 +122,8 @@ main = do
                                                       if notValid
                                                         then generateWarningMessage "Preencha todos os campos."
                                                         else do
-                                                            addEvent bdAdd builderMain
+                                                            addEvent builderMain bdAdd switcher categoriesMap
                                                             widgetDestroy newEvent
-                                                            putStrLn "Novo evento adicionado."
                                                             endDo
                                endDo
                           -- ###########################################################################
@@ -122,25 +139,32 @@ main = do
 
     mainGUI
 
+
 endDo :: IO ()
 endDo = do putStr ""
 
 
 --Cria uma categoria com um dado nome s. Adiciona-a na HashTable. Adiciona-o ao parent.
-createCategory :: String -> HashTable String Fixed -> Notebook-> IO ()
+createCategory :: String -> HashTable String Builder -> Notebook-> IO Builder
 createCategory s ht parent = do
     categoryBuilder <- makeBuilder "./ui/UI_Categoria.glade"
     fixedBox <- getFixed categoryBuilder "mainFixed"
     lblCategory <- getLabel categoryBuilder "lblCategoryTitle"
     labelSetText lblCategory s
-    H.insert ht s fixedBox
+    H.insert ht s categoryBuilder
     notebookAppendPage parent fixedBox s
-    return ()
+    return categoryBuilder
 
-
+--Retorna o builder de uma categoria. Assim, pode-se ter acesso a todos os seus elementos.
+getCategory :: String -> HashTable String Builder -> IO Builder
+getCategory s ht = do
+    value <- H.lookup ht s
+    case value of
+        Just x -> return x
+        Nothing -> error "Referência de categoria não encontrada."
 
 --Verifica se uma dada categoria existe.
-categoryExists :: String -> HashTable String Fixed -> IO Bool
+categoryExists :: String -> HashTable String Builder -> IO Bool
 categoryExists s ht = do
     value <- H.lookup ht s
     return $ isJust value
@@ -166,14 +190,85 @@ checkFields bEvent = do
     descriptionBox <- getTextBox bEvent "txtBoxDescription"
     categoryBox    <- getTextBox bEvent "txtBoxCategory"
     name           <- entryGetText nameBox
-    description    <- entryGetText descriptionBox
     category       <- entryGetText categoryBox
-    return $ name == "" || description == "" || category == ""
+    return $ name == "" || category == ""
 
 
-addEvent :: Builder -> Builder -> IO ()
-addEvent bMain bEvento = do
-    putStrLn "TEste!"
+--Esta função deve receber:
+--  O builder do createEvent, que é de onde serão capturados os textos inseridos pelo usuário nas text box.
+--  O builder da main page. Caso a categoria não exista, ela precisará ser criada.
+--  A hashTable para que seja possível pegar a referência da categoria, caso exista. 
+addEvent :: Builder -> Builder -> Notebook -> HashTable String Builder -> IO ()
+addEvent bMain bEvento switcher ht = do
+    categoria    <- getTextFromEntry bEvento "txtBoxCategory"
+    eventForm    <- toEventForm bEvento
+    --Adicionar aqui função para salvar eventForm no csv.
+    isValid      <- categoryExists categoria ht
+    if not isValid
+        then do
+            --Caso não exista a categoria, criamos uma nova categoria.
+            bCategoria <- createCategory categoria ht switcher
+            insertEvent eventForm ht
+            putStrLn "Categoria criada."
+            --Adicionamos dentro desta categoria o novo evento.
+            endDo
+        else do
+            --A categoria já existe. Basta que se pegue a referência e adicionemos o evento à vertical box.
+            insertEvent eventForm ht
+            putStrLn ""
+
+--Pega um builder e retorna os campos na forma de evento.
+toEventForm :: Builder -> IO Event
+toEventForm builder = do
+    eName        <- getTextFromEntry builder "txtBoxEvent"
+    eDescription <- getTextFromEntry builder "txtBoxDescription"
+    eCategory    <- getTextFromEntry builder "txtBoxCategory"
+    eCalendar    <- builderGetObject builder castToCalendar "calendar"
+    --Adicionar aqui as outras variáveis.
+    return $ Item (pack eName) 0 0 0 (pack eDescription) (pack eCategory) False (Category)
+
+getTextFromEntry :: Builder -> String -> IO String
+getTextFromEntry builder s = do
+    entryRef <- getTextBox builder s
+    entryGetText entryRef
+
+--Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
+--Chame este evento para adicionar um Event a uma dada categoria.
+insertEvent :: Event -> HashTable String Builder -> IO ()
+insertEvent event ht = do
+    --Captura todas as informações relevantes para construir o widget.
+    let nName        = name event
+    let nDay         = day event
+    let nmonth       = month event
+    let nCategory    = category event
+    let nYear        = year event
+    let nDescription = description event
+    let nRecurrent   = recurrent event
+    let nColor       = Category
+
+    -------------------------------------------------------------------
+    categoriaBuilderRef <- getCategory (unpack nCategory) ht --Pega o builder da categoria.
+    categoriesBox <- getVerticalBox categoriaBuilderRef "categoriesBox"
+
+    --Cria uma nova linha de evento para visualização do usuário.
+    bLinhaEvento <- makeBuilder "./ui/UI_Evento.glade"
+    newEvento    <- getFixed bLinhaEvento "fixedMain"
+    setLabelText bLinhaEvento "lblEvent" (unpack nName)
+
+    --Adiciona o evento ao vertical box.
+    widgetReparent newEvento categoriesBox
+
+    endDo
+
+setLabelText :: Builder -> String -> String -> IO ()
+setLabelText builder lbl lblText = do
+    label <- getLabel builder lbl
+    labelSetText label lblText
+    endDo
+
+getVerticalBox :: Builder -> String -> IO VBox
+getVerticalBox b s = do
+    builderGetObject b castToVBox s
 
 getFixed :: Builder -> String -> IO Fixed
 getFixed b s = do
