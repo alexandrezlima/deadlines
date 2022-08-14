@@ -19,7 +19,7 @@ today :: IO (Integer, Int, Int)
 
 Funções úteis:
 
-daysleft :: Int -> Int -> Integer -> Day -> Integer
+daysleft :: Event -> Day -> Integer
 dateToWeekDay :: Int -> Int -> Int -> String
 
 getEvents          :: IO [Event]
