@@ -15,6 +15,9 @@ categoryPath :: FilePath
 eventPath    :: FilePath
 
 Funções úteis:
+
+dateToWeekDay :: Int -> Int -> Int -> String
+
 getEvents          :: IO [Event]
 insertToFile       :: FilePath -> Event -> IO (Either String ())
 encodeEventsToFile :: FilePath -> [Event] -> IO (Either String ())
@@ -277,6 +280,24 @@ filterHasDesc es = [e | e <- es, description e /= ""]
 -- Filtra a lita de Eventos passada como parametro e devolve apenas eventos que tem são recorrentes
 filterIsReg :: [Event] -> [Event]
 filterIsReg es = [e | e <- es, recurrent e]
+
+-- Função que recebe 3 inteiros representando uma data e devolve uma string com o dia da semana dessa data
+dateToWeekDay :: Int -> Int -> Int -> String
+dateToWeekDay d m y = string
+  where
+    y0 =  y - (14 - m) `div` 12
+    x = y0 + y0 `div` 4 - y0 `div` 100 + y0 `div` 400
+    m0 = m + 12 * ((14 - m) `div` 12) - 2
+    d0 = (d + x + 31 * m0 `div` 12) `mod` 7
+    string = case d0 of
+      0 -> "Domingo"
+      1 -> "Segunda-feira"
+      2 -> "Terça-feira"
+      3 -> "Quarta-feira"
+      4 -> "Quinta-feira"
+      5 -> "Sexta-feira"
+      6 -> "Sábado"
+      _ -> "Erro"
 
 testrecord :: ByteString
 testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
