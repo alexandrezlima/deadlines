@@ -15,17 +15,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 --import Data.Text.Read
 --import Text.Printf (printf)
 
-{- 
-    Requer um builder, que tem a referência do .glade.
-    A primeira string corresponde ao nome da label.
-    A segunda string corresponde ao novo nome da label.
-    Retorna uma IO Label
--}
-getLabelObject :: Builder -> String -> String -> IO Label
-getLabelObject b s n = do
-    label <- builderGetObject b castToLabel s
-    labelSetLabel label n
-    return label
+
 
 --A definição abaixo cria automaticamente as funções ayyyy byyyy e cyyyy. Assim, ao fazer Teste ayyyy ele vai pegar o int que tá em ayyyy...
 data Teste = Teste {
@@ -73,9 +63,15 @@ main = do
                                -- Adiciona o novo evento a uma categoria já existente.
                                -- Caso a categoria não exista, ela é criada e este novo evento é inserido.
                                confirm <- getButton bdAdd "btnConfirmar"
-                               onClicked confirm $ do --addEvent bdAdd 
-                                                      putStrLn "Novo evento adicionado."
-                               putStr ""
+                               onClicked confirm $ do notValid <- checkFields bdAdd
+                                                      if notValid
+                                                        then generateWarningMessage "Preencha todos os campos."
+                                                        else do
+                                                            addEvent bdAdd builderMain
+                                                            widgetDestroy newEvent
+                                                            putStrLn "Novo evento adicionado."
+                                                            endDo
+                               endDo
                           -- ###########################################################################
     -- ##############################################################################################
 
@@ -89,9 +85,47 @@ main = do
 
     mainGUI
 
-addEvent :: Builder -> IO ()
-addEvent b = undefined
+endDo :: IO ()
+endDo = do putStr ""
 
+
+--Gera uma dialog box com uma dada string. É do tipo warning.
+generateWarningMessage :: String -> IO ()
+generateWarningMessage s = do
+    warningBuilder <- makeBuilder "./ui/UI_Aviso.glade"
+    warningWindow  <- builderGetObject warningBuilder castToMessageDialog "window"
+    warningMessage <- getLabel warningBuilder "lblMessage"
+    labelSetText warningMessage s
+    confirm <- getButton warningBuilder "btnConfirm"
+    onClicked confirm $ widgetDestroy warningWindow
+    widgetShowAll warningWindow
+    putStrLn "Warning: há algum campo vazio."
+
+
+--Verifica se todos os campos são válidos, isto é, se existem campos vazios.
+--Retorna true se algum campo for vazio.
+checkFields :: Builder -> IO Bool
+checkFields bEvent = do
+    nameBox        <- getTextBox bEvent "txtBoxEvent"
+    descriptionBox <- getTextBox bEvent "txtBoxDescription"
+    categoryBox    <- getTextBox bEvent "txtBoxCategory"
+    name           <- entryGetText nameBox
+    description    <- entryGetText descriptionBox
+    category       <- entryGetText categoryBox
+    return $ name == "" || description == "" || category == ""
+
+
+addEvent :: Builder -> Builder -> IO ()
+addEvent bMain bEvento = do
+    putStrLn "TEste!"
+
+getLabel :: Builder -> String -> IO Label
+getLabel b s = do
+    builderGetObject b castToLabel s
+
+getTextBox :: Builder -> String -> IO Entry
+getTextBox b s = do
+    builderGetObject b castToEntry s
 
 --Realiza um cast para capturar um determinado botão de um certo builder.
 getButton :: Builder -> String -> IO Button
