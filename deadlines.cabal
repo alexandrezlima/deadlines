@@ -35,6 +35,7 @@ library
     , bytestring
     , cassava
     , gtk
+    , hashtables
     , text
     , vector
   default-language: Haskell2010
@@ -52,6 +53,7 @@ executable deadlines-exe
     , cassava
     , deadlines
     , gtk
+    , hashtables
     , text
     , vector
   default-language: Haskell2010
@@ -70,6 +72,7 @@ test-suite deadlines-test
     , cassava
     , deadlines
     , gtk
+    , hashtables
     , text
     , vector
   default-language: Haskell2010
