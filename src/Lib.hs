@@ -1,9 +1,16 @@
 -- Criar o testrecord e o eventrecord não funciona sem isso
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Lib
-  (
+  (Prefs,
+  Category,
+  Event,
+  mkEvent,
+  encodeEventsToFile,
+  decodeEventsFromFile,
+  insertToFile
   ) where
 
 import Control.Exception (IOException)
@@ -15,16 +22,15 @@ import qualified Data.ByteString.Lazy as BL
 
 import Data.Csv as Cassava
 
-import qualified Data.Vector as V
-
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 
-import Graphics.UI.Gtk
+import Graphics.UI.Gtk ( Color(..) )
 
 --Importado para ser usado no Cassanva.decodeByName
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Data.Either
 
 -- DataType que representa um registro do meu csv
 {-
@@ -43,7 +49,7 @@ data Prefs =
 data Category =
   Cat
     { catName :: Text
-    , catColor :: String
+    , catColor :: Text
     }
 
 data Event =
@@ -60,7 +66,7 @@ data Event =
   deriving (Eq, Show)
 
 -- ADT que indica a fonte de onde o evento recebe sua cor. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixa para a cor ser ajustada automaticamente conforme a data se aproxima.
-data ColorSrc = Custom Color | Category | Gradient deriving (Eq, Show)
+data ColorSrc = Custom Text | Category | Gradient deriving (Eq, Show)
 
 -- Para o Cassava decodificar os registros, eles tem que ser instância de FromRecord (sem Header) ou FromNamedRecord (com Header)
 instance FromNamedRecord Event where
@@ -89,6 +95,7 @@ instance FromField Bool where
 instance FromField ColorSrc where
   parseField "Category" = pure Category
   parseField "Gradient" = pure Gradient
+  parseField othertype = Custom <$> parseField othertype
 --TODO:  parseField color = Custom color
 
 -- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header). Se o ADT tiver um outro ADT dentro dele, tbm é necessário 
@@ -111,8 +118,9 @@ instance ToField Bool where
   toField False = "False"
 
 instance ToField ColorSrc where
-  toField Gradient = "Gradient"
-  toField Category = "Category"
+  toField Gradient      = "Gradient"
+  toField Category      = "Category"
+  toField (Custom text) = toField text
 
 -- Diz para o Cassava a ordem padrão do meu Header
 instance DefaultOrdered Event where
@@ -144,15 +152,6 @@ encodeEvent = Cassava.encodeByName eventHeader
 encodeEvent' :: Vector Event -> ByteString
 encodeEvent' = Cassava.encodeDefaultOrderedByName . Foldable.toList
 
-{-
---Função que tava no tutorial que não entendi direito, talvez seja util
-encodeItems
-  :: Vector Item
-  -> ByteString
-encodeItems =
-  Cassava.encodeDefaultOrderedByName . Foldable.toList
--}
-
 encodeEventsToFile :: FilePath -> Vector Event -> IO (Either String ())
 encodeEventsToFile filePath = catchShowIO . BL.writeFile filePath . encodeEvent'
 
@@ -172,6 +171,19 @@ catchShowIO action =
     handleIOException :: IOException -> IO (Either String a)
     handleIOException = return . Left . show
 
+-- Funcao que adiciona um evento ao final de um arquivo csv. Se o arquivo não existir, ele é criado
+insertToFile :: FilePath -> Event -> IO (Either String ())
+insertToFile filePath event = do
+  eventVec <- file
+  let newVec = Vector.cons event eventVec
+  encodeEventsToFile filePath newVec
+  where
+    -- Desenvolopo o vetor do Either
+    file :: IO (Vector Event)
+    file = do 
+        fileRead <- decodeEventsFromFile filePath
+        return $ fromRight (Vector.singleton event) fileRead
+
 testrecord :: ByteString
 testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
 
@@ -184,15 +196,16 @@ eventrecord =
     , description = "insert desc"
     , category    = "none"
     , recurrent   = False
-    , color       = Gradient
+    , color       = Custom "#EEEEEE"
   }
 
+main :: IO ()
 main = do
   --Tutorial de 2 segundos na pag inicial da biblioteca
   csvData <- BL.readFile "./csv/teste.csv"
   case decode NoHeader csvData of
     Left err -> putStrLn err
-    Right v -> V.forM_ v $ \ (col1, col2, col3) ->
+    Right v -> Vector.forM_ v $ \ (col1, col2, col3) ->
       putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3
 
   -- Alguns testes que fui fazendo pra ver como funciona
@@ -217,7 +230,9 @@ main = do
   let vec = Vector.singleton eventrecord
   let cod2 = encodeEvent' vec
 
-  encodeEventsToFile "./csv/codificado.csv" vec
+  _ <- encodeEventsToFile "./csv/codificado.csv" vec
+
+  registro5 <- insertToFile "./csv/codificadoooo.csv" eventrecord
 
   --print registro
   --print segundoRegistro
@@ -225,3 +240,4 @@ main = do
   print registro4
   print cod1
   print cod2
+  print registro5
