@@ -60,10 +60,10 @@ main = do
     
     --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
     categoriesMap <- makeHashTable
-    x <- createCategory "categoria teste" categoriesMap switcher
-    insertEvent (Item (pack "EventTeste 1") 1 1 2022 (pack "test") (pack "categoria teste") False 1 CatName) categoriesMap
-    insertEvent (Item (pack "EventTeste 2") 1 2 2022 (pack "test") (pack "categoria teste") False 1 CatName) categoriesMap
-    insertEvent (Item (pack "EventTeste 3") 1 3 2022 (pack "test") (pack "categoria teste") True  1 CatName) categoriesMap
+
+    loadTable <- getEvents
+    let applied = Prelude.map (\s -> insertFromTable s categoriesMap switcher) loadTable
+
     --Ideia para salvar e posteriormente carregar as configurações do usuário:
     --      Ter funções de sort por propriedade. Isto é, ter uma função que
     --      recebe uma lista, uma string que corresponde ao nome da coluna (ex: nome, data, etc)
@@ -178,6 +178,7 @@ addEvent bMain bEvento switcher ht = do
     categoria    <- getTextFromEntry bEvento "txtBoxCategory"
     eventForm    <- toEventForm bEvento
     --Adicionar aqui função para salvar eventForm no csv.
+    insertToFile eventPath eventForm
     isValid      <- categoryExists categoria ht
     if not isValid
         then do
@@ -252,6 +253,18 @@ getMonthName x = case x of
     11 -> "Novembro"
     12 -> "Dezembro"
     _  -> ""
+
+insertFromTable :: Event -> HashTable String Builder -> Notebook -> IO ()
+insertFromTable event ht switcher = do
+    let nCategory = unpack $ category event
+    isValid <- categoryExists nCategory ht
+    if not isValid
+        then do
+            x <- createCategory nCategory ht switcher
+            insertEvent event ht
+            endDo
+        else insertEvent event ht
+    endDo
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
