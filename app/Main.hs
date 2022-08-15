@@ -89,7 +89,7 @@ main = do
                                -- Caso a categoria não exista, ela é criada e este novo evento é inserido.
                                confirm     <- getButton bdAdd "btnConfirmar"
                                bRecurrent  <- builderGetObject bdAdd castToToggleButton "recurrentCheckbox"
-                               --bRecurrency <- builderGetObject bdAdd castToSpinButton "recurrency"
+                               bRegularity <- builderGetObject bdAdd castToHPaned "regularityPanel"
                                onClicked confirm $ do notValid <- checkFields bdAdd
                                                       if notValid
                                                         then generateWarningMessage "Preencha todos os campos."
@@ -97,7 +97,9 @@ main = do
                                                             addEvent builderMain bdAdd switcher categoriesMap
                                                             widgetDestroy newEvent
                                                             endDo
-                               --on_recurrentCheckbox_toggled bRecurrent $ do widgetShow bRecurrency (if )
+                               onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity 
+                                                         if isVisible then widgetHide bRegularity  else widgetShow bRegularity
+                                                         endDo
                                endDo
                           -- ###########################################################################
     -- ##############################################################################################
@@ -196,8 +198,11 @@ toEventForm builder = do
     eName        <- getTextFromEntry builder "txtBoxEvent"
     eDescription <- getTextFromEntry builder "txtBoxDescription"
     eCategory    <- getTextFromEntry builder "txtBoxCategory"
-    --eRecurrent   <- builderGetObject builder castToCheckButton "recurrentCheckbox"
-    --isRecurrent  <- check
+    eRecurrent   <- builderGetObject builder castToToggleButton "recurrentCheckbox"
+    isRecurrent  <- toggleButtonGetActive eRecurrent
+    eRegularity  <- builderGetObject builder castToSpinButton "regularity"
+    vRegularity <- spinButtonGetValue eRegularity
+    let valueRec = fromInteger $ truncate vRegularity
 
     -- Calendar settings.
     eCalendar    <- builderGetObject builder castToCalendar "calendar"
@@ -209,7 +214,7 @@ toEventForm builder = do
 
     --Adicionar aqui as outras variáveis.
     --Month tem um retorno de 0 a 11. Logo foi ajustado para 1 a 12.
-    return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) False 1 CatName
+    return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) isRecurrent valueRec CatName
 
 --Retorna o dia, mês ou ano dependendo do parâmetro passado. 0 => dia, 1 => mês, 2 => ano.
 getDate :: (Int, Int, Int) -> Int -> IO Int
@@ -253,17 +258,18 @@ getMonthName x = case x of
 insertEvent :: Event -> HashTable String Builder -> IO ()
 insertEvent event ht = do
     --Captura todas as informações relevantes para construir o widget.
-    let nName        = name event
+    let nName        = unpack $ name event
     let nDay         = day event
     let nMonth       = month event
-    let nCategory    = category event
+    let nCategory    = unpack $ category event
     let nYear        = year event
-    let nDescription = description event
+    let nDescription = unpack $ description event
     let nRecurrent   = recurrent event
-    let nColor       = Category
+    let nRegularity  = regularity  event
+    let nColor       = Category --Alterar color depois.
 
     -------------------------------------------------------------------
-    categoriaBuilderRef <- getCategory (unpack nCategory) ht --Pega o builder da categoria.
+    categoriaBuilderRef <- getCategory nCategory ht --Pega o builder da categoria.
     categoriesBox <- getVerticalBox categoriaBuilderRef "categoriesBox"
 
     --Cria uma nova linha de evento para visualização do usuário.
@@ -271,12 +277,27 @@ insertEvent event ht = do
     newEvento    <- getFixed bLinhaEvento "fixedMain"
 
     --Ajuste das labels: preenche nome do evento, descrição, dia da semana, data e tempo restante.
-    setLabelText bLinhaEvento "lblEvent" (unpack nName ++ (if nRecurrent then " (recorrente)" else ""))
+    setLabelText bLinhaEvento "lblEvent" (nName ++ (if nRecurrent then " (recorrente: a cada " ++ show nRegularity  ++ " dias)" else ""))
     setLabelText bLinhaEvento "lblDay" (show nDay ++ " de " ++ getMonthName nMonth ++ " de " ++ show nYear)
-    setLabelText bLinhaEvento "lblDescription" (unpack nDescription)
+    setLabelText bLinhaEvento "lblDescription" nDescription
     setLabelText bLinhaEvento "lblWeekDay" (dateToWeekDay nDay nMonth nYear)
     hoje <- getToday
     setLabelText bLinhaEvento "lblTimeRemaining" (show (daysleft event hoje) ++ " dias")
+
+    --BOTÕES ----------------------------------------------------
+    btnEditar <- getButton bLinhaEvento "btnEditar"
+    onClicked btnEditar $ do putStrLn ("Clique em um botão de editar do widget " ++ nName)
+
+    btnExcluir <- getButton bLinhaEvento "btnExcluir"
+    onClicked btnExcluir $ do widgetDestroy newEvento
+                              b <- containerGetChildren categoriesBox
+                              if Prelude.length b == 0
+                                then do page <- getFixed categoriaBuilderRef "mainFixed"
+                                        widgetDestroy page
+                                        --Adicionar aqui o evento para remover do csv.
+                                        endDo
+                                else putStrLn "test False"
+    -------------------------------------------------------------
 
     --Adiciona o evento ao vertical box.
     widgetReparent newEvento categoriesBox
@@ -326,6 +347,7 @@ createEvent b = do
     novoEvento   <- builderGetObject b castToDialog "newEventWindow"
     calendario   <- builderGetObject b castToCalendar "calendar"
     hoje         <- getToday
+    --O calendar possui meses de 0 a 11. Por isso o -1 do getMonth.
     calendarSelectMonth calendario (getMonth hoje - 1) (getYear hoje)
     calendarSelectDay calendario (getDay hoje)
 
