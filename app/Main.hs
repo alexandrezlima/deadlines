@@ -61,8 +61,11 @@ main = do
     --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
     categoriesMap <- makeHashTable
 
+    -- Posteriormente ler a tabela de categorias antes de criar os eventos.
+    -- Criar função para refresh da data table.
     loadTable <- getEvents
-    let applied = Prelude.map (\s -> insertFromTable s categoriesMap switcher) loadTable
+    insertFromTable loadTable categoriesMap switcher
+    
 
     --Ideia para salvar e posteriormente carregar as configurações do usuário:
     --      Ter funções de sort por propriedade. Isto é, ter uma função que
@@ -254,17 +257,18 @@ getMonthName x = case x of
     12 -> "Dezembro"
     _  -> ""
 
-insertFromTable :: Event -> HashTable String Builder -> Notebook -> IO ()
-insertFromTable event ht switcher = do
-    let nCategory = unpack $ category event
+insertFromTable :: [Event] -> HashTable String Builder -> Notebook -> IO ()
+insertFromTable [] _ _            = endDo
+insertFromTable (x:xs) ht switcher = do
+    let nCategory = unpack $ category x
     isValid <- categoryExists nCategory ht
     if not isValid
         then do
-            x <- createCategory nCategory ht switcher
-            insertEvent event ht
+            cat <- createCategory nCategory ht switcher
+            insertEvent x ht
             endDo
-        else insertEvent event ht
-    endDo
+        else insertEvent x ht
+    insertFromTable xs ht switcher
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
@@ -303,13 +307,15 @@ insertEvent event ht = do
 
     btnExcluir <- getButton bLinhaEvento "btnExcluir"
     onClicked btnExcluir $ do widgetDestroy newEvento
+                              --Adicionar aqui o evento para remover o EVENT do csv.
                               b <- containerGetChildren categoriesBox
                               if Prelude.length b == 0
                                 then do page <- getFixed categoriaBuilderRef "mainFixed"
                                         widgetDestroy page
-                                        --Adicionar aqui o evento para remover do csv.
+                                        putStrLn ("Evento " ++ nName ++ " e categoria "++ nCategory ++ " removidos com sucesso.")
+                                        --Adicionar aqui o evento para remover a CATEGORIA do csv.
                                         endDo
-                                else putStrLn "test False"
+                                else putStrLn ("Evento " ++ nName ++ " removido com sucesso.")
     -------------------------------------------------------------
 
     --Adiciona o evento ao vertical box.
