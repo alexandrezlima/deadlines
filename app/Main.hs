@@ -88,7 +88,7 @@ main = do
                                -- Adiciona o novo evento a uma categoria já existente.
                                -- Caso a categoria não exista, ela é criada e este novo evento é inserido.
                                confirm     <- getButton bdAdd "btnConfirmar"
-                               --bRecurrent  <- builderGetObject bdAdd castToToggleButton "recurrentCheckbox"
+                               bRecurrent  <- builderGetObject bdAdd castToToggleButton "recurrentCheckbox"
                                --bRecurrency <- builderGetObject bdAdd castToSpinButton "recurrency"
                                onClicked confirm $ do notValid <- checkFields bdAdd
                                                       if notValid
@@ -326,7 +326,7 @@ createEvent b = do
     novoEvento   <- builderGetObject b castToDialog "newEventWindow"
     calendario   <- builderGetObject b castToCalendar "calendar"
     hoje         <- getToday
-    calendarSelectMonth calendario (getYear hoje) (getMonth hoje)
+    calendarSelectMonth calendario (getMonth hoje - 1) (getYear hoje)
     calendarSelectDay calendario (getDay hoje)
 
     -- CANCEL   ##################################################################
