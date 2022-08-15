@@ -19,36 +19,7 @@ import qualified Data.HashTable.IO as H
 import Data.Maybe
 import Data.Text
 
-
---A definição abaixo cria automaticamente as funções ayyyy byyyy e cyyyy. Assim, ao fazer Teste ayyyy ele vai pegar o int que tá em ayyyy...
-data Teste = Teste {
-                      ayyyy :: Int
-                    , byyyy :: Int
-                    , cyyyy :: Int
-                    }
-
-
-{-
-createEvent :: Event -> IO Frame
-createEvent n = do
-    builder <- builderNew
-    builderAddFromFile builder "./ui/UI_Evento.glade"
-    eventTitle          <- getLabelObject builder  ""   (unpack  . name n)
-    eventDescription    <- getLabelObject builder  ""   (unpack  . description n)
-    eventCategory       <- getLabelObject builder  ""   (unpack  .  category n)
-    eventDay            <- getLabelObject builder  ""   (showInt .  day n)
-    eventMonth          <- getLabelObject builder  ""   (showInt .  month n)
-    eventYear           <- getLabelObject builder  ""   (showInt .  year n)
-    eventRecurrent      <- getLabelObject builder  ""   (if (recurrent n) then "Sim" else "Não")
-    --button <- builderGetObject builder castToButton "button1"
-    --onClicked button $ do putStrLn k
-
-    builderGetObject builder castToFrame "frame1"
-    where
-        k = a ++ " test"
--}
-
---Hashtable verificado em github.com/gregorycollins/hashtables
+--Hashtable simples
 type HashTable a b = H.BasicHashTable a b
 
 makeHashTable :: IO (HashTable String Builder)
@@ -90,15 +61,14 @@ main = do
     --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
     categoriesMap <- makeHashTable
     x <- createCategory "categoria teste" categoriesMap switcher
-    insertEvent (Item (pack "EventTeste 1") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
-    insertEvent (Item (pack "EventTeste 2") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
-    insertEvent (Item (pack "EventTeste 3") 0 0 0 (pack "test") (pack "categoria teste") True Category) categoriesMap
+    insertEvent (Item (pack "EventTeste 1") 1 1 2022 (pack "test") (pack "categoria teste") False 1 CatName) categoriesMap
+    insertEvent (Item (pack "EventTeste 2") 1 2 2022 (pack "test") (pack "categoria teste") False 1 CatName) categoriesMap
+    insertEvent (Item (pack "EventTeste 3") 1 3 2022 (pack "test") (pack "categoria teste") True  1 CatName) categoriesMap
     --Ideia para salvar e posteriormente carregar as configurações do usuário:
     --      Ter funções de sort por propriedade. Isto é, ter uma função que
     --      recebe uma lista, uma string que corresponde ao nome da coluna (ex: nome, data, etc)
     --      retorna a mesma lista só que organizada de acordo com a propriedade fornecida.
     --Na hora de popular a tabela, resta apenas passar o vetor organizado como parâmetro.
-
     
 
     --Para criar e adicionar uma nova categoria, basta chamar a função createCategory.
@@ -117,7 +87,9 @@ main = do
                                -- CONFIRM  ##################################################################
                                -- Adiciona o novo evento a uma categoria já existente.
                                -- Caso a categoria não exista, ela é criada e este novo evento é inserido.
-                               confirm <- getButton bdAdd "btnConfirmar"
+                               confirm     <- getButton bdAdd "btnConfirmar"
+                               --bRecurrent  <- builderGetObject bdAdd castToToggleButton "recurrentCheckbox"
+                               --bRecurrency <- builderGetObject bdAdd castToSpinButton "recurrency"
                                onClicked confirm $ do notValid <- checkFields bdAdd
                                                       if notValid
                                                         then generateWarningMessage "Preencha todos os campos."
@@ -125,6 +97,7 @@ main = do
                                                             addEvent builderMain bdAdd switcher categoriesMap
                                                             widgetDestroy newEvent
                                                             endDo
+                               --on_recurrentCheckbox_toggled bRecurrent $ do widgetShow bRecurrency (if )
                                endDo
                           -- ###########################################################################
     -- ##############################################################################################
@@ -223,14 +196,57 @@ toEventForm builder = do
     eName        <- getTextFromEntry builder "txtBoxEvent"
     eDescription <- getTextFromEntry builder "txtBoxDescription"
     eCategory    <- getTextFromEntry builder "txtBoxCategory"
+    --eRecurrent   <- builderGetObject builder castToCheckButton "recurrentCheckbox"
+    --isRecurrent  <- check
+
+    -- Calendar settings.
     eCalendar    <- builderGetObject builder castToCalendar "calendar"
+    cFormat      <- calendarGetDate eCalendar
+    eDay         <- getDate cFormat 0
+    eMonth       <- getDate cFormat 1
+    eYear        <- getDate cFormat 2
+
+
     --Adicionar aqui as outras variáveis.
-    return $ Item (pack eName) 0 0 0 (pack eDescription) (pack eCategory) False (Category)
+    --Month tem um retorno de 0 a 11. Logo foi ajustado para 1 a 12.
+    return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) False 1 CatName
+
+--Retorna o dia, mês ou ano dependendo do parâmetro passado. 0 => dia, 1 => mês, 2 => ano.
+getDate :: (Int, Int, Int) -> Int -> IO Int
+getDate (_, _, d) 0 = return d
+getDate (_, m, _) 1 = return m
+getDate (y, _, _) 2 = return y
+getDate (_, _, _) _ = return $ -1 --Esta ação nunca ocorrerá.
+
+getYear :: (Integer, Int, Int) -> Int
+getYear (a, _, _) = fromInteger a
+
+getMonth :: (Integer, Int, Int) -> Int
+getMonth (_, a, _) = a
+
+getDay :: (Integer, Int, Int) -> Int
+getDay (_, _, a) = a
 
 getTextFromEntry :: Builder -> String -> IO String
 getTextFromEntry builder s = do
     entryRef <- getTextBox builder s
     entryGetText entryRef
+
+getMonthName :: Int -> String
+getMonthName x = case x of
+    1  -> "Janeiro"
+    2  -> "Feveiro"
+    3  -> "Março"
+    4  -> "Abril"
+    5  -> "Maio"
+    6  -> "Junho"
+    7  -> "Julho"
+    8  -> "Agosto"
+    9  -> "Setembro"
+    10 -> "Outubro"
+    11 -> "Novembro"
+    12 -> "Dezembro"
+    _  -> ""
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
@@ -239,7 +255,7 @@ insertEvent event ht = do
     --Captura todas as informações relevantes para construir o widget.
     let nName        = name event
     let nDay         = day event
-    let nmonth       = month event
+    let nMonth       = month event
     let nCategory    = category event
     let nYear        = year event
     let nDescription = description event
@@ -253,7 +269,14 @@ insertEvent event ht = do
     --Cria uma nova linha de evento para visualização do usuário.
     bLinhaEvento <- makeBuilder "./ui/UI_Evento.glade"
     newEvento    <- getFixed bLinhaEvento "fixedMain"
-    setLabelText bLinhaEvento "lblEvent" (unpack nName)
+
+    --Ajuste das labels: preenche nome do evento, descrição, dia da semana, data e tempo restante.
+    setLabelText bLinhaEvento "lblEvent" (unpack nName ++ (if nRecurrent then " (recorrente)" else ""))
+    setLabelText bLinhaEvento "lblDay" (show nDay ++ " de " ++ getMonthName nMonth ++ " de " ++ show nYear)
+    setLabelText bLinhaEvento "lblDescription" (unpack nDescription)
+    setLabelText bLinhaEvento "lblWeekDay" (dateToWeekDay nDay nMonth nYear)
+    hoje <- getToday
+    setLabelText bLinhaEvento "lblTimeRemaining" (show (daysleft event hoje) ++ " dias")
 
     --Adiciona o evento ao vertical box.
     widgetReparent newEvento categoriesBox
@@ -300,7 +323,11 @@ createEvent :: Builder -> IO Dialog
 createEvent b = do
 
     --Cria um novo widget para adição de evento.
-    novoEvento <- builderGetObject b castToDialog "newEventWindow"
+    novoEvento   <- builderGetObject b castToDialog "newEventWindow"
+    calendario   <- builderGetObject b castToCalendar "calendar"
+    hoje         <- getToday
+    calendarSelectMonth calendario (getYear hoje) (getMonth hoje)
+    calendarSelectDay calendario (getDay hoje)
 
     -- CANCEL   ##################################################################
     -- Remove a janela de adição do novo evento. Quit.

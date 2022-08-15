@@ -244,7 +244,14 @@
             <property name="height_request">70</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="xalign">1</property>
+            <property name="has_tooltip">True</property>
+            <property name="tooltip_text" translatable="yes">Criado por: 
+-Tiago Henrique Simionato Machado
+-Alexandre Zeferino Lima
+
+Disponível em:
+https://github.com/AleeZL/deadlines</property>
+            <property name="xalign">0.94999998807907104</property>
             <property name="stock">gtk-missing-image</property>
           </object>
           <packing>
