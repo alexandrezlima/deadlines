@@ -15,11 +15,11 @@ Variaveis úteis:
 categoryPath :: FilePath
 eventPath    :: FilePath
 
-today :: IO (Integer, Int, Int)
-
 Funções úteis:
 
-daysleft :: Event -> Day -> Int
+getToday :: IO (Integer, Int, Int)
+
+daysleft :: Event -> (Integer, Int, Int) -> Int
 dateToWeekDay :: Int -> Int -> Int -> String
 
 getEvents          :: IO [Event]
@@ -36,6 +36,9 @@ filterDistantEvets :: Int -> Int -> Int -> [Event] -> [Event]
 filterEventName    :: Text -> [Event] -> [Event]
 filterHasDesc      :: [Event] -> [Event]
 filterIsReg        :: [Event] -> [Event]
+
+sortEventsBy :: String -> [Event] -> [Event]
+sortEventsBy method es
 -}
 
 module Lib where
@@ -53,6 +56,7 @@ import Data.Text (Text, isInfixOf)
 import qualified Data.Text.Encoding as Text
 
 import Graphics.UI.Gtk ( Color(..) )
+import Data.List (sortOn)
 
 --Importado para ser usado no Cassanva.decodeByName
 import Data.Vector (Vector)
@@ -81,22 +85,6 @@ eventPath = "./csv/events.csv"
 -- Devolve o (ano, mes, dia)
 getToday :: IO (Integer, Int, Int)
 getToday = getCurrentTime >>= return . toGregorian . utctDay
-
--- Recebe um evento e o dia de hoje, e calcula quantos dias faltam para o evento
-daysleft :: Event -> (Integer, Int, Int) -> Int
-daysleft e (ty, tm, td)
---  Caso o evento for recorrente, e a data armazenada já tiver passado, mostro a próxima ocorrencia
-  | recurrent e && diff /= abs diff = nextDay
-  | otherwise                       = diff
-  where
-    d     = day e
-    m     = month e
-    y     = toInteger $ year e
-    today = fromGregorian ty tm td
-    diff  = fromInteger $ diffDays (fromGregorian y m d) today
-    -- Caso seja um evento regular
-    reg     = regularity e
-    nextDay = diff `mod` reg
 
 data Prefs =
   Prefs
@@ -299,25 +287,47 @@ filterEvents value getter es = [e | e <- es, getter e == value]
 filterEventsByCat :: Text -> [Event] -> [Event]
 filterEventsByCat catname = filterEvents catname category
 
--- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão ANTES do dia informado
+-- Filtra a lista de Eventos passada como parametro para devolver os eventos que acontecerão ANTES do dia informado
 filterCloseEvents :: Int -> Int -> Int -> [Event] -> [Event]
 filterCloseEvents d m y es = [e | e <- es, (year e < y) || (year e == y && month e < m) || (year e == y && month e == m && day e < d) ]
 
--- Filtra a lita de Eventos passada como parametro para devolver os eventos que acontecerão DEPOIS do dia informado
+-- Filtra a lista de Eventos passada como parametro para devolver os eventos que acontecerão DEPOIS do dia informado
 filterDistantEvets :: Int -> Int -> Int -> [Event] -> [Event]
 filterDistantEvets d m y es = [e | e <- es, (year e > y) || (year e == y && month e > m) || (year e == y && month e == m && day e > d) ]
 
--- Filtra a lita de Eventos passada como parametro e devole aqueles que cuja substring de argumento está presente no nome do evento
+-- Filtra a lista de Eventos passada como parametro e devole aqueles que cuja substring de argumento está presente no nome do evento
 filterEventName :: Text -> [Event] -> [Event]
 filterEventName n es = [e | e <- es, n `isInfixOf` name e]
 
--- Filtra a lita de Eventos passada como parametro e devolve apenas eventos que tem alguma descrição
+-- Filtra a lista de Eventos passada como parametro e devolve apenas eventos que tem alguma descrição
 filterHasDesc :: [Event] -> [Event]
 filterHasDesc es = [e | e <- es, description e /= ""]
 
--- Filtra a lita de Eventos passada como parametro e devolve apenas eventos que tem são recorrentes
+-- Filtra a lista de Eventos passada como parametro e devolve apenas eventos que são recorrentes
 filterIsReg :: [Event] -> [Event]
 filterIsReg es = [e | e <- es, recurrent e]
+
+filterEventsBy :: String -> Text -> [Event] -> [Event]
+filterEventsBy method v es
+ | method == "category" = filterEventsByCat v es
+ | otherwise = es
+
+-- Recebe um evento e uma triple representando o dia de hoje, e calcula quantos dias faltam para o evento
+-- Leva em conta se o Evento é recorrente ou não, e se ele já aconteceu ou vai acontecer
+daysleft :: Event -> (Integer, Int, Int) -> Int
+daysleft e (ty, tm, td)
+--  Caso o evento for recorrente, e a data armazenada já tiver passado, mostro a próxima ocorrencia
+  | recurrent e && diff /= abs diff = nextDay
+  | otherwise                       = diff
+  where
+    d     = day e
+    m     = month e
+    y     = toInteger $ year e
+    today = fromGregorian ty tm td
+    diff  = fromInteger $ diffDays (fromGregorian y m d) today
+    -- Caso seja um evento regular
+    reg     = regularity e
+    nextDay = diff `mod` reg
 
 -- Função que recebe 3 inteiros representando uma data e devolve uma string com o dia da semana dessa data
 dateToWeekDay :: Int -> Int -> Int -> String
@@ -337,6 +347,36 @@ dateToWeekDay d m y = string
       6 -> "Sábado"
       _ -> "Erro"
 
+-- Ordena a lista de eventos recebida de acordo com o critério informado na String. Se a String recebida não for uma das predefinidas, a lista é retornada sem alterações
+sortEventsBy :: String -> [Event] -> [Event]
+sortEventsBy method es
+ | method == "name"        = sortOn name es
+ | method == "date"        = es--sortByDate es
+ | method == "recurrent"   = filterIsReg es   ++ [e | e <- es, not $ recurrent e]
+ | method == "description" = filterHasDesc es ++ [e | e <- es, description e == ""]
+ | otherwise               = es
+
+-- Reordena a lista de eventos de acordo com o mais antigo para o mais recente
+sortByDate :: [Event] -> [[Event]]
+sortByDate es = ess
+  where
+    ysort = sortOn year es
+    ess = listsOfYears ysort
+    msort = sortByMonth ess
+
+-- Função auxiliar. Recebe varias listas de eventos, que estão separadas por anos, isto é [[2020], [2021], [2004]]
+-- Organiza cada uma dessas listas por mes
+sortByMonth :: [[Event]] -> [[Event]]
+sortByMonth = map (sortOn month)
+
+-- Função auxiliar. Agrupa uma lista de eventos em várias listas de acordo com o ano de cada evento
+listsOfYears :: [Event] -> [[Event]]
+listsOfYears [] = []
+listsOfYears [e] = [[e]]
+listsOfYears (e:es)
+ | year e == year (head es) = (e : es) : listsOfYears (tail es)
+ | otherwise                = [e] : listsOfYears es
+
 testrecord :: ByteString
 testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
 
@@ -344,8 +384,8 @@ eventrecord :: Event
 eventrecord =
   Item { name     = "depoisDeAmanha"
     , day         = 02
-    , month       = 01
-    , year        = 2023
+    , month       = 04
+    , year        = 2000
     , description = "insert desc"
     , category    = "none"
     , recurrent   = True
@@ -357,7 +397,7 @@ eventrecord2 :: Event
 eventrecord2 =
   Item { name     = "AntesdeHoje"
     , day         = 02
-    , month       = 01
+    , month       = 05
     , year        = 2000
     , description = "insert desc"
     , category    = "none"
@@ -370,7 +410,7 @@ eventrecord3 :: Event
 eventrecord3 =
   Item { name     = "depoisDeAmanha"
     , day         = 28
-    , month       = 08
+    , month       = 03
     , year        = 2022
     , description = "insert desc"
     , category    = "none"
@@ -383,8 +423,8 @@ eventrecord4 :: Event
 eventrecord4 =
   Item { name     = "AntesdeHoje"
     , day         = 02
-    , month       = 01
-    , year        = 2000
+    , month       = 10
+    , year        = 2023
     , description = "insert desc"
     , category    = "none"
     , recurrent   = False
@@ -419,11 +459,13 @@ main = do
   let diff2 = daysleft eventrecord2 hoje
   let diff3 = daysleft eventrecord3 hoje
   let diff4 = daysleft eventrecord4 hoje
-
+  let events = [eventrecord3, eventrecord4, eventrecord, eventrecord2]
+  let concatedList  = listsOfYears events
+  let concatedList'  = listsOfYears (sortOn year events)
   --print registro3
   --print registro4
   --print cod2
-  print dia
+  {-print dia
   putStrLn "Diff True, depois: "
   print diff
   putStrLn "Diff True, antes: "
@@ -431,4 +473,9 @@ main = do
   putStrLn "Diff False, depois: "
   print diff3
   putStrLn "Diff False, antes: "
-  print diff4
+  print diff4-}
+  print $ sortByDate events
+  putStrLn "\nTentativa 1 : "
+  print concatedList
+  putStrLn "\nTentativa 2 : "
+  print concatedList'
