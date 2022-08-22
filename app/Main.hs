@@ -107,9 +107,46 @@ main = do
                           -- ###########################################################################
     -- ##############################################################################################
 
+
+    -- FILTROS ######################################################################################
+
+    -- Filtrar por categoria
+    action_filter_category <- getAction builderMain "Action_Filtro_Categoria"
+    onActionActivate action_filter_category $ do createFilterDialogText 1 categoriesMap switcher
+
+    -- Filtrar por nome do evento
+    action_filter_name <- getAction builderMain "Action_Filtro_Nome"
+    onActionActivate action_filter_name $ do createFilterDialogText 2 categoriesMap switcher
+
+    -- Filtrar por evento mais próximo
+    action_filter_closer <- getAction builderMain "Action_Filtro_MaisProx"
+    onActionActivate action_filter_closer $ do createFilterDialogDate 1 categoriesMap switcher
+
+    -- Filtrar por evento mais distante
+    action_filter_further <- getAction builderMain "Action_Filtro_MaisDist"
+    onActionActivate action_filter_further $ do createFilterDialogDate 2 categoriesMap switcher
+
+    -- Filtrar eventos que possuem descrição
+    action_filter_description <- getAction builderMain "Action_Filtro_Desc"
+    onActionActivate action_filter_description $ do updatedTable <- getEvents
+                                                    refreshEvents (filterHasDesc updatedTable) categoriesMap switcher
+
+    -- Filtrar eventos que são recorrentes
+    action_filter_recurrency <- getAction builderMain "Action_Filtro_Recorrencia"
+    onActionActivate action_filter_recurrency $ do updatedTable <- getEvents
+                                                   refreshEvents (filterIsReg updatedTable) categoriesMap switcher
+
+    -- Remover filtros
+    action_filter_remove <- getAction builderMain "Action_Filtro_Remover"
+    onActionActivate action_filter_remove $ do updatedTable <- getEvents
+                                               refreshEvents updatedTable categoriesMap switcher
+
     --Exemplo de como capturar a ação de um botão do submenu. Note que no glade tivemos que associar uma nova ação ao item.
-    action <- builderGetObject builderMain castToAction "action1"
-    onActionActivate action $ do (putStrLn "test")
+    --action <- builderGetObject builderMain castToAction "action1"
+    --onActionActivate action $ do (putStrLn "test")
+
+
+    -- ##############################################################################################
 
     --Mostra todos os widgets presentes em window.
     widgetShowAll window
@@ -121,6 +158,82 @@ main = do
 endDo :: IO ()
 endDo = do putStr ""
 
+--Int corresponde ao tipo de filtro. 1 filtra eventos mais próximos, 2 filtra eventos mais distantes.
+createFilterDialogDate :: Int -> HashTable String Builder -> Notebook -> IO ()
+createFilterDialogDate n ht switcher = do
+    builder <- makeBuilder "./ui/UI_FilterDialogDate.glade"
+    window <- builderGetObject builder castToDialog "mainDialog"
+    btnCancelar  <- getButton builder "btn_cancelar"
+    btnConfirmar <- getButton builder "btn_confirmar"
+
+    dia' <- getSpin builder "spin_dia"
+    mes' <- getSpin builder "spin_mes"
+    ano' <- getSpin builder "spin_ano"
+
+    if n == 1 
+        then setLabelText builder "lblTitulo" "Filtrar eventos anteriores a: "
+        else setLabelText builder "lblTitulo" "Filtrar eventos posteriores a:"
+    
+    --Botão cancelar.
+    onClicked btnCancelar $ do widgetDestroy window
+
+    onClicked btnConfirmar $ do updatedTable <- getEvents
+                                vDia <- spinButtonGetValue dia'
+                                vMes <- spinButtonGetValue mes'
+                                vAno <- spinButtonGetValue ano'
+                                let vDia' = fromInteger $ truncate vDia
+                                let vMes' = fromInteger $ truncate vMes
+                                let vAno' = fromInteger $ truncate vAno
+                                if n == 1
+                                    then refreshEvents (filterCloseEvents  vDia' vMes' vAno' updatedTable) ht switcher
+                                    else refreshEvents (filterDistantEvets vDia' vMes' vAno' updatedTable) ht switcher
+                                widgetDestroy window
+
+
+    widgetShow window
+    endDo
+
+
+--Int corresponde ao tipo de filtro. 1 filtra categoria, 2 filtra nome.
+createFilterDialogText :: Int -> HashTable String Builder -> Notebook -> IO ()
+createFilterDialogText n ht switcher = do
+    builder <- makeBuilder "./ui/UI_FilterDialog.glade"
+    window <- builderGetObject builder castToDialog "mainDialog"
+    btnCancelar  <- getButton builder "btn_cancelar"
+    btnConfirmar <- getButton builder "btn_confirmar"
+
+    if n == 1 
+        then setLabelText builder "lblTitulo" "Categoria:"
+        else setLabelText builder "lblTitulo" "Eventos que contém o seguinte texto:"
+    
+    --Botão cancelar.
+    onClicked btnCancelar $ do widgetDestroy window
+
+    onClicked btnConfirmar $ do text <- getTextFromEntry builder "filterText"
+                                updatedTable <- getEvents
+                                if n == 1
+                                    then refreshEvents (filterEventsByCat (pack text) updatedTable) ht switcher
+                                    else refreshEvents (filterEventName   (pack text) updatedTable) ht switcher
+                                widgetDestroy window
+
+
+    widgetShow window
+    endDo
+
+
+refreshEvents :: [Event] -> HashTable String Builder -> Notebook -> IO ()
+refreshEvents es ht switcher = do
+    ht <- makeHashTable --Recria a hashtable
+    children <- containerGetChildren switcher
+    clearSwitcher children
+    insertFromTable es ht switcher
+    endDo
+
+clearSwitcher :: [Widget] -> IO ()
+clearSwitcher []     = do endDo
+clearSwitcher (x:xs) = do
+    widgetDestroy x
+    clearSwitcher xs
 
 --Cria uma categoria com um dado nome s. Adiciona-a na HashTable. Adiciona-o ao parent.
 createCategory :: String -> HashTable String Builder -> Notebook-> IO Builder
@@ -204,7 +317,7 @@ toEventForm builder = do
     eCategory    <- getTextFromEntry builder "txtBoxCategory"
     eRecurrent   <- builderGetObject builder castToToggleButton "recurrentCheckbox"
     isRecurrent  <- toggleButtonGetActive eRecurrent
-    eRegularity  <- builderGetObject builder castToSpinButton "regularity"
+    eRegularity  <- getSpin builder "regularity"
     vRegularity <- spinButtonGetValue eRegularity
     let valueRec = fromInteger $ truncate vRegularity
 
@@ -219,6 +332,10 @@ toEventForm builder = do
     --Adicionar aqui as outras variáveis.
     --Month tem um retorno de 0 a 11. Logo foi ajustado para 1 a 12.
     return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) isRecurrent valueRec CatName
+
+-- createDescFilterDialog :: [Event] -> IO ()
+-- createFilterDialog es = do
+
 
 --Retorna o dia, mês ou ano dependendo do parâmetro passado. 0 => dia, 1 => mês, 2 => ano.
 getDate :: (Int, Int, Int) -> Int -> IO Int
@@ -303,7 +420,15 @@ insertEvent event ht = do
 
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
-    onClicked btnEditar $ do putStrLn ("Clique em um botão de editar do widget " ++ nName)
+    onClicked btnEditar $ do putStrLn "Função de editar ainda não construída."
+                            {-bEdit <- makeBuilder "./ui/UI_editarEvento.glade"
+                             bEditWindow <- builderGetObject bEdit castToDialog "editEventWindow"
+                             setTextBoxText bEdit "txtBoxEvent" nName
+                             setTextBoxText bEdit "txtBoxDescription" nDescription
+                             setTextBoxText bEdit "txtBoxCategory" nCategory
+                             widgetShow bEditWindow
+                             -}
+                             endDo
 
     btnExcluir <- getButton bLinhaEvento "btnExcluir"
     onClicked btnExcluir $ do widgetDestroy newEvento
@@ -323,11 +448,27 @@ insertEvent event ht = do
 
     endDo
 
+
+setTextBoxText :: Builder -> String -> String -> IO ()
+setTextBoxText builder txtbox texto = do
+    textBox <- builderGetObject builder castToEntry txtbox
+    entrySetText textBox texto
+    endDo
+
+--A primeira string corresponde ao nome do label e a segunda, ao novo texto que o label terá.
 setLabelText :: Builder -> String -> String -> IO ()
 setLabelText builder lbl lblText = do
     label <- getLabel builder lbl
     labelSetText label lblText
     endDo
+
+getSpin :: Builder -> String -> IO SpinButton
+getSpin b s = do
+    builderGetObject b castToSpinButton s
+
+getAction :: Builder -> String -> IO Action
+getAction b s = do
+    builderGetObject b castToAction s
 
 getVerticalBox :: Builder -> String -> IO VBox
 getVerticalBox b s = do
@@ -380,5 +521,3 @@ createEvent b = do
     -- Mostra o widget na tela.
     widgetShow novoEvento
     return novoEvento
---addEvent :: Window -> Dialog -> IO ()
---addEvent mW tA = "K"

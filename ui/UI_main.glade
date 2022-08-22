@@ -2,7 +2,49 @@
 <interface>
   <requires lib="gtk+" version="2.24"/>
   <!-- interface-naming-policy project-wide -->
+  <object class="GtkAction" id="Action_Filtro_Categoria"/>
+  <object class="GtkAction" id="Action_Filtro_Desc"/>
+  <object class="GtkAction" id="Action_Filtro_MaisDist"/>
+  <object class="GtkAction" id="Action_Filtro_MaisProx"/>
+  <object class="GtkAction" id="Action_Filtro_Nome"/>
+  <object class="GtkAction" id="Action_Filtro_Recorrencia"/>
+  <object class="GtkAction" id="Action_Filtro_Remover"/>
   <object class="GtkAction" id="action1"/>
+  <object class="GtkImage" id="image1">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image2">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image3">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image4">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image5">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image6">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image7">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
   <object class="GtkWindow" id="mainWindow">
     <property name="width_request">1000</property>
     <property name="height_request">850</property>
@@ -209,16 +251,97 @@
               <object class="GtkMenuItem" id="menuFiltrar">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">_Filtrar</property>
-                <property name="use_underline">True</property>
+                <property name="label" translatable="yes">Filtrar</property>
+                <child type="submenu">
+                  <object class="GtkMenu" id="menu4">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Category">
+                        <property name="label">Categoria</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_Categoria</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image1</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Closer">
+                        <property name="label">Mais próximo</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_MaisProx</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image2</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Distant">
+                        <property name="label">Mais distante</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_MaisDist</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image3</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Name">
+                        <property name="label">Nome</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_Nome</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image4</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Description">
+                        <property name="label">Se tiver descrição</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_Desc</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image5</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Recurrency">
+                        <property name="label">Recorrente</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_Recorrencia</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image6</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="Filtro_Remove">
+                        <property name="label">Remover filtros</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">Action_Filtro_Remover</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image7</property>
+                        <property name="use_stock">False</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
             </child>
             <child>
               <object class="GtkMenuItem" id="menuVisualizar">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">_Visualizar</property>
-                <property name="use_underline">True</property>
+                <property name="label" translatable="yes">Visualizar</property>
                 <child type="submenu">
                   <object class="GtkMenu" id="menu3">
                     <property name="visible">True</property>
