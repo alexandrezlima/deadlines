@@ -39,6 +39,7 @@ filterIsReg        :: [Event] -> [Event]
 
 sortEventsBy :: String -> [Event] -> [Event]
 sortEventsBy method es
+Ver os comentarios na função para ver qual string passar
 -}
 
 module Lib where
@@ -65,6 +66,7 @@ import Data.Either
 
 import Data.Time.Clock
 import Data.Time.Calendar
+import Data.List (groupBy)
 
 -- DataType que representa um registro do meu csv
 {-
@@ -347,35 +349,53 @@ dateToWeekDay d m y = string
       6 -> "Sábado"
       _ -> "Erro"
 
--- Ordena a lista de eventos recebida de acordo com o critério informado na String. Se a String recebida não for uma das predefinidas, a lista é retornada sem alterações
+-- Ordena a lista de eventos recebida de acordo com o critério informado na String.
+-- Se a String recebida não for uma das predefinidas, a lista é retornada sem alterações
 sortEventsBy :: String -> [Event] -> [Event]
 sortEventsBy method es
  | method == "name"        = sortOn name es
- | method == "date"        = es--sortByDate es
+ | method == "date"        = sortByDate es
  | method == "recurrent"   = filterIsReg es   ++ [e | e <- es, not $ recurrent e]
  | method == "description" = filterHasDesc es ++ [e | e <- es, description e == ""]
  | otherwise               = es
 
 -- Reordena a lista de eventos de acordo com o mais antigo para o mais recente
-sortByDate :: [Event] -> [[Event]]
-sortByDate es = ess
+sortByDate :: [Event] -> [Event]
+sortByDate es = concat $ concat dsorted
   where
-    ysort = sortOn year es
-    ess = listsOfYears ysort
-    msort = sortByMonth ess
+    ysorted     = sortOn year es
+    yearGroups  = groupBy yearEq ysorted
+    msorted     = sortByMonth yearGroups
+    monthGroups = map (groupBy monthEq) msorted
+    dsorted     = sortByDay monthGroups
+
+
+-- TODO: REMOVER
+-- Função auxiliar. Agrupa uma lista de eventos em várias listas de de eventos de acordo com algum dos campos do Evento.
+-- Por exemplo, se quiser agrupar de tal forma que cada sublista tenha os anos iguais: listsOfDates year es
+-- Para meses iguais: listsOfDates month es
+-- E assim para qualquer campo instancia de Eq de Event
+listsOfDates :: Eq b => (a -> b) -> [a] -> [[a]]
+listsOfDates _ []  = []
+listsOfDates _ [e] = [[e]]
+listsOfDates getter (e:es)
+ | getter e == getter (head es) = (e : [head es]) : listsOfDates getter (tail es)
+ | otherwise                = [e] : listsOfDates getter es
+
+yearEq :: Event -> Event -> Bool
+yearEq e1 e2 = year e1 == year e2
+
+monthEq :: Event -> Event -> Bool
+monthEq e1 e2 = month e1 == month e2
 
 -- Função auxiliar. Recebe varias listas de eventos, que estão separadas por anos, isto é [[2020], [2021], [2004]]
 -- Organiza cada uma dessas listas por mes
 sortByMonth :: [[Event]] -> [[Event]]
 sortByMonth = map (sortOn month)
 
--- Função auxiliar. Agrupa uma lista de eventos em várias listas de acordo com o ano de cada evento
-listsOfYears :: [Event] -> [[Event]]
-listsOfYears [] = []
-listsOfYears [e] = [[e]]
-listsOfYears (e:es)
- | year e == year (head es) = (e : es) : listsOfYears (tail es)
- | otherwise                = [e] : listsOfYears es
+-- Função auxiliar. Funciona que nem a ordenação por mes, mas agora as listas estão ordenadas por mes
+sortByDay :: [[[Event]]] -> [[[Event]]]
+sortByDay = map (map (sortOn day))
 
 testrecord :: ByteString
 testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
@@ -383,8 +403,8 @@ testrecord = "name,day,month,year,description,category,recurrent,color\namanha,0
 eventrecord :: Event
 eventrecord =
   Item { name     = "depoisDeAmanha"
-    , day         = 02
-    , month       = 04
+    , day         = 04
+    , month       = 05
     , year        = 2000
     , description = "insert desc"
     , category    = "none"
@@ -396,7 +416,7 @@ eventrecord =
 eventrecord2 :: Event
 eventrecord2 =
   Item { name     = "AntesdeHoje"
-    , day         = 02
+    , day         = 10
     , month       = 05
     , year        = 2000
     , description = "insert desc"
@@ -410,8 +430,8 @@ eventrecord3 :: Event
 eventrecord3 =
   Item { name     = "depoisDeAmanha"
     , day         = 28
-    , month       = 03
-    , year        = 2022
+    , month       = 05
+    , year        = 2000
     , description = "insert desc"
     , category    = "none"
     , recurrent   = False
@@ -460,8 +480,8 @@ main = do
   let diff3 = daysleft eventrecord3 hoje
   let diff4 = daysleft eventrecord4 hoje
   let events = [eventrecord3, eventrecord4, eventrecord, eventrecord2]
-  let concatedList  = listsOfYears events
-  let concatedList'  = listsOfYears (sortOn year events)
+--  let concatedList  = listsOfYears events
+--  let concatedList'  = listsOfYears (sortOn year events)
   --print registro3
   --print registro4
   --print cod2
@@ -474,8 +494,8 @@ main = do
   print diff3
   putStrLn "Diff False, antes: "
   print diff4-}
-  print $ sortByDate events
-  putStrLn "\nTentativa 1 : "
-  print concatedList
-  putStrLn "\nTentativa 2 : "
-  print concatedList'
+  print $ sortEventsBy "date" events
+  --putStrLn "\nTentativa 1 : "
+  --print concatedList
+  --putStrLn "\nTentativa 2 : "
+  --print concatedList'
