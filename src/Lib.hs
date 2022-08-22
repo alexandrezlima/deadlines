@@ -84,25 +84,19 @@ getToday = getCurrentTime >>= return . toGregorian . utctDay
 
 -- Recebe um evento e o dia de hoje, e calcula quantos dias faltam para o evento
 daysleft :: Event -> (Integer, Int, Int) -> Int
-daysleft e t =
-  if recurrent e then
-    fromInteger $ diffDays (fromGregorian y m d) today
-  else
-    fromInteger nextDay
+daysleft e (ty, tm, td)
+--  Caso o evento for recorrente, e a data armazenada já tiver passado, mostro a próxima ocorrencia
+  | recurrent e && diff /= abs diff = nextDay
+  | otherwise                       = diff
   where
-    d = day e
-    m = month e
-    y = toInteger $ year e
-    -- Extraindo da triple
-    fst3 (a, _, _) = a
-    snd3 (_, b, _) = b
-    trd3 (_, _, c) = c
-    today = fromGregorian (fst3 t) (snd3 t) (trd3 t)
+    d     = day e
+    m     = month e
+    y     = toInteger $ year e
+    today = fromGregorian ty tm td
+    diff  = fromInteger $ diffDays (fromGregorian y m d) today
     -- Caso seja um evento regular
-    dl      = diffDays (fromGregorian y m d) today
-    reg     = toInteger $ regularity e
-    --                  floor          + reg
-    nextDay = (abs dl `div` reg) * reg + reg
+    reg     = regularity e
+    nextDay = diff `mod` reg
 
 data Prefs =
   Prefs
@@ -189,6 +183,7 @@ instance ToNamedRecord Event where
       , "description" .= description
       , "category"    .= category
       , "recurrent"   .= recurrent
+      , "regularity"  .= regularity
       , "color"       .= color
       ]
 
@@ -350,11 +345,50 @@ eventrecord =
   Item { name     = "depoisDeAmanha"
     , day         = 02
     , month       = 01
+    , year        = 2023
+    , description = "insert desc"
+    , category    = "none"
+    , recurrent   = True
+    , regularity  = 7
+    , color       = Custom "#EEEEEE"
+  }
+
+eventrecord2 :: Event
+eventrecord2 =
+  Item { name     = "AntesdeHoje"
+    , day         = 02
+    , month       = 01
+    , year        = 2000
+    , description = "insert desc"
+    , category    = "none"
+    , recurrent   = True
+    , regularity  = 7
+    , color       = Custom "#EEEEEE"
+  }
+
+eventrecord3 :: Event
+eventrecord3 =
+  Item { name     = "depoisDeAmanha"
+    , day         = 28
+    , month       = 08
     , year        = 2022
     , description = "insert desc"
     , category    = "none"
     , recurrent   = False
-    , regularity  = 0
+    , regularity  = 7
+    , color       = Custom "#EEEEEE"
+  }
+
+eventrecord4 :: Event
+eventrecord4 =
+  Item { name     = "AntesdeHoje"
+    , day         = 02
+    , month       = 01
+    , year        = 2000
+    , description = "insert desc"
+    , category    = "none"
+    , recurrent   = False
+    , regularity  = 7
     , color       = Custom "#EEEEEE"
   }
 
@@ -368,19 +402,33 @@ main = do
       putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3
 
   -- Consigo decodificar o csv com a função auxiliar e o evento que tinha deixado pronto
-  let registro3 = decodeEvents testrecord
+  --let registro3 = decodeEvents testrecord
 
   -- Função que le um arquivo funcionando
-  registro4 <-decodeEventsFromFile "./csv/teste.csv"
+  --registro4 <-decodeEventsFromFile "./csv/teste.csv"
 
-  let vec = Vector.singleton eventrecord
-  let cod2 = encodeEvent' $ Foldable.toList vec
+  --let vec = Vector.singleton eventrecord
+  --let cod2 = encodeEvent' $ Foldable.toList vec
 
-  _ <- encodeEventsToFile "./csv/codificado.csv" $ Foldable.toList vec
+  --_ <- encodeEventsToFile "./csv/codificado.csv" $ Foldable.toList vec
 
-  let dia = dateToWeekDay 14 8 2022
+  let dia = dateToWeekDay 02 01 2000
+  hoje <- getToday
 
-  print registro3
-  print registro4
-  print cod2
+  let diff  = daysleft eventrecord  hoje
+  let diff2 = daysleft eventrecord2 hoje
+  let diff3 = daysleft eventrecord3 hoje
+  let diff4 = daysleft eventrecord4 hoje
+
+  --print registro3
+  --print registro4
+  --print cod2
   print dia
+  putStrLn "Diff True, depois: "
+  print diff
+  putStrLn "Diff True, antes: "
+  print diff2
+  putStrLn "Diff False, depois: "
+  print diff3
+  putStrLn "Diff False, antes: "
+  print diff4
