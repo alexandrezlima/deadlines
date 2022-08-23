@@ -22,14 +22,18 @@ getToday :: IO (Integer, Int, Int)
 daysleft      :: Event -> (Integer, Int, Int) -> Int
 dateToWeekDay :: Int -> Int -> Int -> String
 
-getEvents          :: IO [Event]
-getPrefs           :: IO Prefs
-savePrefs          :: Prefs -> IO (Either String ())
-insertEvent        :: Event -> IO (Either String ())
-encodeToFile       :: FilePath -> [adt] -> IO (Either String ())
+getEvents              :: IO [Event]
+getPrefs               :: IO Prefs
+savePrefs              :: Prefs -> IO (Either String ())
+insertEvent            :: Event -> IO (Either String ())
+insertCategory         :: Category -> IO (Either String ())
+encodeToFile           :: FilePath -> [adt] -> IO (Either String ())
+deleteCategoryFromFile :: String -> IO (Either String ())
+deleteEventFromFile    :: String -> IO (Either String ())
 
-deleteEventByName  :: String -> [Event] -> [Event]
+deleteAdtByField :: Eq field => (adt -> field) -> field -> [adt] -> [adt]
 
+mkPrefs :: Bool -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
 mkCategory :: Text -> Text -> Category
 mkEvent    :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
 
@@ -61,16 +65,15 @@ import Data.Text (Text, isInfixOf, pack)
 import qualified Data.Text.Encoding as Text
 
 --import Graphics.UI.Gtk ( Color(..) )
-import Data.List (sortOn)
+import Data.List (sortOn, groupBy)
 
 --Importado para ser usado no Cassanva.decodeByName
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import Data.Either
+import Data.Either (fromRight)
 
-import Data.Time.Clock
-import Data.Time.Calendar
-import Data.List (groupBy)
+import Data.Time.Clock    (getCurrentTime, UTCTime(utctDay))
+import Data.Time.Calendar (diffDays, fromGregorian, toGregorian)
 
 -- DataType que representa um registro do meu csv
 {-
@@ -111,6 +114,7 @@ data Category =
     { catName  :: Text
     , catColor :: Text
     }
+  deriving Show
 
 data Event =
   Item
@@ -254,7 +258,7 @@ instance DefaultOrdered Event where
       ]
 
 prefsHeader :: Header
-prefsHeader = Vector.fromList ["autodelete", "anotherop"]
+prefsHeader = Vector.fromList ["autodelete", "defaultSort", "defaultFilter", "defaultFilterName", "defaultFilterDay", "defaultFilterMonth", "defaultFilterYear"]
 
 -- Tem que por aqui o que estiver escrito no CSV, é a primeira linha do arquivo
 categoryHeader :: Header
@@ -263,6 +267,9 @@ categoryHeader = Vector.fromList ["catname", "catcolor"]
 -- Tem que por aqui o que estiver escrito no CSV
 eventHeader :: Header
 eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "category", "recurrent", "regularity", "color"]
+
+mkPrefs :: Bool -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
+mkPrefs ad ds df dfn dfd dfm dfy = Prefs {autodelete = ad, defaultSort = ds, defaultFilter = df, defaultFilterName = dfn, defaultFilterDay = dfd, defaultFilterMonth = dfm, defaultFilterYear = dfy}
 
 mkCategory :: Text -> Text -> Category
 mkCategory n c = Category {catName = n, catColor = c}
@@ -284,11 +291,14 @@ encodeToFile filePath = catchShowIO . BL.writeFile filePath . encodeAdt'
 decodeAdt :: FromNamedRecord adt => ByteString -> Either String (Vector adt)
 decodeAdt = fmap snd . Cassava.decodeByName
 
-decodePrefsFromFile :: FilePath -> IO (Either String (Vector Prefs))
-decodePrefsFromFile filePath = catchShowIO (BL.readFile filePath) >>= return . either Left decodeAdt
+decodePrefsFromFile :: IO (Either String (Vector Prefs))
+decodePrefsFromFile = catchShowIO (BL.readFile prefsPath) >>= return . either Left decodeAdt
 
-decodeEventsFromFile :: FilePath -> IO (Either String (Vector Event))
-decodeEventsFromFile filePath = catchShowIO (BL.readFile filePath) >>= return . either Left decodeAdt
+decodeCategoriesFromFile :: IO (Either String (Vector Category))
+decodeCategoriesFromFile = catchShowIO (BL.readFile categoryPath) >>= return . either Left decodeAdt
+
+decodeEventsFromFile :: IO (Either String (Vector Event))
+decodeEventsFromFile = catchShowIO (BL.readFile eventPath) >>= return . either Left decodeAdt
 
 -- Funcao de auxilio que tenta realizar uma acao e retorna uma exceçao se alguma acontecer
 catchShowIO :: IO a -> IO (Either String a)
@@ -303,31 +313,35 @@ catchShowIO action =
 -- Apos isso, converte para o ADT de Prefs e o retorna
 getPrefs :: IO Prefs
 getPrefs = do
-  prefvec <- fmap Foldable.toList ioVec
+  prefvec <- fmap (Foldable.toList . fromRight Vector.empty) decodePrefsFromFile
   return $ head prefvec
-  where
-    -- Desenvelopo o vetor do Either
-    ioVec :: IO (Vector Prefs)
-    ioVec = do
-      file <- decodePrefsFromFile prefsPath
-      return $ fromRight Vector.empty file
 
--- Função que, apos executar a leitra dos registro, transforma o Vector que é retornado em uma lista
+getCategories :: IO [Category]
+getCategories = do fmap (Foldable.toList . fromRight Vector.empty) decodeCategoriesFromFile
+
+-- Função que, apos executar a leitra dos registros, transforma o Vector que é retornado em uma lista
 -- Foldable.toList transforma o Vector em []
 getEvents :: IO [Event]
-getEvents = do
-  fmap Foldable.toList ioVec
-  where
-    -- Desenvelopo o vetor do Either
-    ioVec :: IO (Vector Event)
-    ioVec = do
-      file <- decodeEventsFromFile eventPath
-      return $ fromRight Vector.empty file
+getEvents = do fmap (Foldable.toList . fromRight Vector.empty) decodeEventsFromFile
 
 savePrefs :: Prefs -> IO (Either String ())
 savePrefs prefs = encodeToFile prefsPath [prefs]
 
--- Funcao que adiciona um evento ao final do arquivo csv dos eventos. Se o arquivo não existir, ele é criado. Primeiro preciso ler o arquivo que já existe, depois coloco e evento novo no final e escrevo tudo de volta no arquivo.
+
+-- Funcao que adiciona uma categoria ao final do arquivo csv das categorias. Se o arquivo não existir, ele é criado.
+-- Primeiro preciso ler o arquivo que já existe, depois coloco a categoria nova no final e escrevo tudo de volta no arquivo.
+insertCategory :: Category -> IO (Either String ())
+insertCategory newCategory = do
+  categoryVec <- file
+  let categoryList = Foldable.toList categoryVec ++ [newCategory]
+  print categoryVec
+  encodeToFile categoryPath categoryList
+  where
+    file :: IO (Vector Category)
+    file = do fmap (fromRight Vector.empty) decodeCategoriesFromFile
+
+-- Funcao que adiciona um evento ao final do arquivo csv dos eventos. Se o arquivo não existir, ele é criado.
+-- Primeiro preciso ler o arquivo que já existe, depois coloco o evento novo no final e escrevo tudo de volta no arquivo.
 insertEvent :: Event -> IO (Either String ())
 insertEvent newEvent = do
   eventVec <- file
@@ -338,13 +352,36 @@ insertEvent newEvent = do
   where
     -- Desenvelopo o vetor do Either
     file :: IO (Vector Event)
-    file = do
-        fileRead <- decodeEventsFromFile eventPath
-        return $ fromRight (Vector.singleton newEvent) fileRead
+    file = do fmap (fromRight Vector.empty) decodeEventsFromFile
 
--- Retorna a lista de eventos, sem o evento que tiver o nome passado como parametro. Se nenhum evento tiver o nome informado, a lista é inalterada
-deleteEventByName :: String -> [Event] -> [Event]
-deleteEventByName v es = [e | e <- es, name e /= pack v]
+-- Função genérica que retira de uma lista de adt qualquer "instancia" que tiver um valor específico em um de seus campos.
+-- Se nenhum item da lista tiver o valor especificado, a lista é inalterada
+deleteAdtByField :: Eq field => (adt -> field) -> field -> [adt] -> [adt]
+deleteAdtByField getter v es = [e | e <- es, getter e /= v]
+
+-- Sobrescreve o arquivo de categorias, porem sem aquela que tiver o nome informado
+deleteCategoryFromFile :: String -> IO (Either String ())
+deleteCategoryFromFile k = do
+  catVec <- file
+  let cs = Foldable.toList catVec
+  let newcs = deleteAdtByField catName (pack k) cs
+  print catVec
+  encodeToFile categoryPath newcs
+  where
+    file :: IO (Vector Category)
+    file = do fmap (fromRight Vector.empty) decodeCategoriesFromFile
+
+-- Sobrescreve o arquivo de eventos, porem sem aquele que tiver o nome informado
+deleteEventFromFile :: String -> IO (Either String ())
+deleteEventFromFile k = do
+  eventVec <- file
+  let es = Foldable.toList eventVec
+  let newes = deleteAdtByField name (pack k) es
+  print eventVec
+  encodeToFile eventPath newes
+  where
+    file :: IO (Vector Event)
+    file = do fmap (fromRight Vector.empty) decodeEventsFromFile
 
 -- deprecated
 -- Recebe uma lista de eventos e transforma ela em um Vector de Eventos
