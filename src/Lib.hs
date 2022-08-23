@@ -19,12 +19,16 @@ Funções úteis:
 
 getToday :: IO (Integer, Int, Int)
 
-daysleft :: Event -> (Integer, Int, Int) -> Int
+daysleft      :: Event -> (Integer, Int, Int) -> Int
 dateToWeekDay :: Int -> Int -> Int -> String
 
 getEvents          :: IO [Event]
-insertToFile       :: FilePath -> Event -> IO (Either String ())
-encodeEventsToFile :: FilePath -> [Event] -> IO (Either String ())
+getPrefs           :: IO Prefs
+savePrefs          :: Prefs -> IO (Either String ())
+insertEvent        :: Event -> IO (Either String ())
+encodeToFile       :: FilePath -> [adt] -> IO (Either String ())
+
+deleteEventByName  :: String -> [Event] -> [Event]
 
 mkCategory :: Text -> Text -> Category
 mkEvent    :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
@@ -53,10 +57,10 @@ import qualified Data.ByteString.Lazy as BL
 
 import Data.Csv as Cassava
 
-import Data.Text (Text, isInfixOf)
+import Data.Text (Text, isInfixOf, pack)
 import qualified Data.Text.Encoding as Text
 
-import Graphics.UI.Gtk ( Color(..) )
+--import Graphics.UI.Gtk ( Color(..) )
 import Data.List (sortOn)
 
 --Importado para ser usado no Cassanva.decodeByName
@@ -84,32 +88,41 @@ categoryPath = "./csv/categories.csv"
 eventPath :: FilePath
 eventPath = "./csv/events.csv"
 
+prefsPath :: FilePath
+prefsPath = "./csv/prefs.csv"
+
 -- Devolve o (ano, mes, dia)
 getToday :: IO (Integer, Int, Int)
 getToday = getCurrentTime >>= return . toGregorian . utctDay
 
 data Prefs =
   Prefs
-    { autodelete :: Bool
+    { autodelete         :: Bool
+    , defaultSort        :: Int
+    , defaultFilter      :: Int
+    , defaultFilterName  :: String
+    , defaultFilterDay   :: Int
+    , defaultFilterMonth :: Int
+    , defaultFilterYear  :: Int
     }
 
 data Category =
   Category
-    { catName :: Text
+    { catName  :: Text
     , catColor :: Text
     }
 
 data Event =
   Item
-    { name :: Text
-    , day :: Int
-    , month :: Int
-    , year :: Int
+    { name        :: Text
+    , day         :: Int
+    , month       :: Int
+    , year        :: Int
     , description :: Text
-    , category :: Text
-    , recurrent :: Bool
-    , regularity :: Int
-    , color :: ColorSrc
+    , category    :: Text
+    , recurrent   :: Bool
+    , regularity  :: Int
+    , color       :: ColorSrc
     }
   deriving (Eq, Show)
 
@@ -120,6 +133,12 @@ instance FromNamedRecord Prefs where
   parseNamedRecord m =
     Prefs
       <$> m .: "autodelete"
+      <*> m .: "defaultSort"
+      <*> m .: "defaultFilter"
+      <*> m .: "defaultFilterName"
+      <*> m .: "defaultFilterDay"
+      <*> m .: "defaultFilterMonth"
+      <*> m .: "defaultFilterYear"
 
 -- Para o Cassava decodificar o campo do csv e transformar no meu ADT, ele tem que ser instancia de FromNamedRecord
 instance FromNamedRecord Category where
@@ -153,10 +172,23 @@ instance FromField ColorSrc where
   parseField "Gradient" = pure Gradient
   parseField othertype  = Custom <$> parseField othertype
 
+instance ToNamedRecord Prefs where
+  toNamedRecord Prefs{..} =
+    Cassava.namedRecord
+    -- noCSV       .= noADT
+    [ "autodelete"         .= autodelete
+    , "defaultSort"        .= defaultSort
+    , "defaultFilter"      .= defaultFilter
+    , "defaultFilterName"  .= defaultFilterName
+    , "defaultFilterDay"   .= defaultFilterDay
+    , "defaultFilterMonth" .= defaultFilterMonth
+    , "defaultFilterYear"  .= defaultFilterYear
+    ]
+
 instance ToNamedRecord Category where
   toNamedRecord Category{..} =
     Cassava.namedRecord
-    -- noCSV .= noADT
+    -- noCSV     .= noADT
     [ "catname"  .= catName
     , "catcolor" .= catColor
     ]
@@ -186,6 +218,18 @@ instance ToField ColorSrc where
   toField CatName       = "Category"
   toField (Custom text) = toField text
 
+instance DefaultOrdered Prefs where
+  headerOrder _ =
+    Cassava.header
+      [ "autodelete"
+      , "defaultSort"
+      , "defaultFilter"
+      , "defaultFilterName"
+      , "defaultFilterDay"
+      , "defaultFilterMonth"
+      , "defaultFilterYear"
+      ]
+
 -- Diz para o Cassava a ordem padrão do header das categorias
 instance DefaultOrdered Category where
   headerOrder _ =
@@ -209,6 +253,9 @@ instance DefaultOrdered Event where
       , "color"
       ]
 
+prefsHeader :: Header
+prefsHeader = Vector.fromList ["autodelete", "anotherop"]
+
 -- Tem que por aqui o que estiver escrito no CSV, é a primeira linha do arquivo
 categoryHeader :: Header
 categoryHeader = Vector.fromList ["catname", "catcolor"]
@@ -224,23 +271,24 @@ mkEvent :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> Int -> ColorSrc 
 mkEvent n d m y desc cat re reg c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, regularity = reg, color = c}
 
 -- Dado que tenho um Header fixo, a função codifica o ADT para o formato csv
-encodeEvent :: [Event] -> ByteString
-encodeEvent = Cassava.encodeByName eventHeader
+encodeAdt :: ToNamedRecord adt => [adt] -> ByteString
+encodeAdt = Cassava.encodeByName eventHeader
 
--- Dado que Event é uma instancia de DefaultOrdered, posso codificar assim tambem. Eh util receber um vector event pq é isso que o cassava retorna
--- Foldable.toList transforma o Vector em []
-encodeEvent' :: [Event] -> ByteString
-encodeEvent' = Cassava.encodeDefaultOrderedByName
+-- Dado que o ADT é uma instancia de DefaultOrdered também, posso codificar assim outra forma.
+encodeAdt' :: (DefaultOrdered adt, ToNamedRecord adt) => [adt] -> ByteString
+encodeAdt' = Cassava.encodeDefaultOrderedByName
 
-encodeEventsToFile :: FilePath -> [Event] -> IO (Either String ())
-encodeEventsToFile filePath = catchShowIO . BL.writeFile filePath . encodeEvent'
+encodeToFile :: (DefaultOrdered adt, ToNamedRecord adt) => FilePath -> [adt] -> IO (Either String ())
+encodeToFile filePath = catchShowIO . BL.writeFile filePath . encodeAdt'
 
--- Quando Either retornar String, significa que houve erro
-decodeEvents :: ByteString -> Either String (Vector Event)
-decodeEvents = fmap snd . Cassava.decodeByName
+decodeAdt :: FromNamedRecord adt => ByteString -> Either String (Vector adt)
+decodeAdt = fmap snd . Cassava.decodeByName
+
+decodePrefsFromFile :: FilePath -> IO (Either String (Vector Prefs))
+decodePrefsFromFile filePath = catchShowIO (BL.readFile filePath) >>= return . either Left decodeAdt
 
 decodeEventsFromFile :: FilePath -> IO (Either String (Vector Event))
-decodeEventsFromFile filePath = catchShowIO (BL.readFile filePath) >>= return . either Left decodeEvents
+decodeEventsFromFile filePath = catchShowIO (BL.readFile filePath) >>= return . either Left decodeAdt
 
 -- Funcao de auxilio que tenta realizar uma acao e retorna uma exceçao se alguma acontecer
 catchShowIO :: IO a -> IO (Either String a)
@@ -251,31 +299,54 @@ catchShowIO action =
     handleIOException :: IOException -> IO (Either String a)
     handleIOException = return . Left . show
 
+-- Executa a leitura das prefs no csv.
+-- Apos isso, converte para o ADT de Prefs e o retorna
+getPrefs :: IO Prefs
+getPrefs = do
+  prefvec <- fmap Foldable.toList ioVec
+  return $ head prefvec
+  where
+    -- Desenvelopo o vetor do Either
+    ioVec :: IO (Vector Prefs)
+    ioVec = do
+      file <- decodePrefsFromFile prefsPath
+      return $ fromRight Vector.empty file
+
 -- Função que, apos executar a leitra dos registro, transforma o Vector que é retornado em uma lista
+-- Foldable.toList transforma o Vector em []
 getEvents :: IO [Event]
 getEvents = do
-  Foldable.toList <$> ioVec
+  fmap Foldable.toList ioVec
   where
+    -- Desenvelopo o vetor do Either
     ioVec :: IO (Vector Event)
     ioVec = do
       file <- decodeEventsFromFile eventPath
       return $ fromRight Vector.empty file
 
--- Funcao que adiciona um evento ao final de um arquivo csv. Se o arquivo não existir, ele é criado. Primeiro preciso ler o arquivo que já existe, depois coloco e evento novo no final e escrevo tudo de volta no arquivo.
-insertToFile :: FilePath -> Event -> IO (Either String ())
-insertToFile filePath newEvent = do
+savePrefs :: Prefs -> IO (Either String ())
+savePrefs prefs = encodeToFile prefsPath [prefs]
+
+-- Funcao que adiciona um evento ao final do arquivo csv dos eventos. Se o arquivo não existir, ele é criado. Primeiro preciso ler o arquivo que já existe, depois coloco e evento novo no final e escrevo tudo de volta no arquivo.
+insertEvent :: Event -> IO (Either String ())
+insertEvent newEvent = do
   eventVec <- file
   let eventList = Foldable.toList eventVec ++ [newEvent]
   -- Não sei pq mas sem esse print o encode retorna que o arquivo ta bloqueado
   print eventVec
-  encodeEventsToFile filePath eventList
+  encodeToFile eventPath eventList
   where
     -- Desenvelopo o vetor do Either
     file :: IO (Vector Event)
     file = do
-        fileRead <- decodeEventsFromFile filePath
+        fileRead <- decodeEventsFromFile eventPath
         return $ fromRight (Vector.singleton newEvent) fileRead
 
+-- Retorna a lista de eventos, sem o evento que tiver o nome passado como parametro. Se nenhum evento tiver o nome informado, a lista é inalterada
+deleteEventByName :: String -> [Event] -> [Event]
+deleteEventByName v es = [e | e <- es, name e /= pack v]
+
+-- deprecated
 -- Recebe uma lista de eventos e transforma ela em um Vector de Eventos
 buildEventVector :: [Event] -> Vector Event
 buildEventVector = foldr Vector.cons Vector.empty
