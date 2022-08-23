@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+-- TODO: Levar categorias em consideração para Ordenar; Cores na GUI; AutoDelete; Prefs de campos pra visualizar
 
 {-
 ADTS:
@@ -108,6 +109,7 @@ data Prefs =
     , defaultFilterMonth :: Int
     , defaultFilterYear  :: Int
     }
+    deriving Show
 
 data Category =
   Category
@@ -309,12 +311,16 @@ catchShowIO action =
     handleIOException :: IOException -> IO (Either String a)
     handleIOException = return . Left . show
 
--- Executa a leitura das prefs no csv.
+-- Executa a leitura das prefs no csv. Caso o arquivo de prefs não exista, valores Padronizados de Preferencia são retornados
 -- Apos isso, converte para o ADT de Prefs e o retorna
 getPrefs :: IO Prefs
 getPrefs = do
   prefvec <- fmap (Foldable.toList . fromRight Vector.empty) decodePrefsFromFile
-  return $ head prefvec
+  (ty, tm, td) <- getToday
+  if null prefvec then
+    return (Prefs True 5 6 "" (fromInteger ty) tm td)
+  else
+    return $ head prefvec
 
 getCategories :: IO [Category]
 getCategories = do fmap (Foldable.toList . fromRight Vector.empty) decodeCategoriesFromFile
@@ -326,7 +332,6 @@ getEvents = do fmap (Foldable.toList . fromRight Vector.empty) decodeEventsFromF
 
 savePrefs :: Prefs -> IO (Either String ())
 savePrefs prefs = encodeToFile prefsPath [prefs]
-
 
 -- Funcao que adiciona uma categoria ao final do arquivo csv das categorias. Se o arquivo não existir, ele é criado.
 -- Primeiro preciso ler o arquivo que já existe, depois coloco a categoria nova no final e escrevo tudo de volta no arquivo.
@@ -563,47 +568,13 @@ eventrecord4 =
 main :: IO ()
 main = do
   --Tutorial de 2 segundos na pag inicial da biblioteca
-  csvData <- BL.readFile "./csv/teste.csv"
+  {-csvData <- BL.readFile "./csv/teste.csv"
   case decode NoHeader csvData of
     Left err -> putStrLn err
     Right v -> Vector.forM_ v $ \ (col1, col2, col3) ->
-      putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3
+      putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3-}
+  let prefes = mkPrefs True 0 0 "a" 0 0 0
 
-  -- Consigo decodificar o csv com a função auxiliar e o evento que tinha deixado pronto
-  --let registro3 = decodeEvents testrecord
+  _ <- getPrefs
 
-  -- Função que le um arquivo funcionando
-  --registro4 <-decodeEventsFromFile "./csv/teste.csv"
-
-  --let vec = Vector.singleton eventrecord
-  --let cod2 = encodeEvent' $ Foldable.toList vec
-
-  --_ <- encodeEventsToFile "./csv/codificado.csv" $ Foldable.toList vec
-
-  let dia = dateToWeekDay 02 01 2000
-  hoje <- getToday
-
-  let diff  = daysleft eventrecord  hoje
-  let diff2 = daysleft eventrecord2 hoje
-  let diff3 = daysleft eventrecord3 hoje
-  let diff4 = daysleft eventrecord4 hoje
-  let events = [eventrecord3, eventrecord4, eventrecord, eventrecord2]
---  let concatedList  = listsOfYears events
---  let concatedList'  = listsOfYears (sortOn year events)
-  --print registro3
-  --print registro4
-  --print cod2
-  {-print dia
-  putStrLn "Diff True, depois: "
-  print diff
-  putStrLn "Diff True, antes: "
-  print diff2
-  putStrLn "Diff False, depois: "
-  print diff3
-  putStrLn "Diff False, antes: "
-  print diff4-}
-  print $ sortEventsBy "date" events
-  --putStrLn "\nTentativa 1 : "
-  --print concatedList
-  --putStrLn "\nTentativa 2 : "
-  --print concatedList'
+  print prefes
