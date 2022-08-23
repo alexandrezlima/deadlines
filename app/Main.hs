@@ -36,6 +36,105 @@ printHash ht s = do
     putStrLn $ if x == Nothing then "Nothing" else "teste"
 --}
 
+--Devolve um monad de lista de Events do atual filtro salvo.
+getCurrentFilteredList :: IO [Event]
+getCurrentFilteredList = do
+    prefs  <- getPrefs
+    events <- getEvents
+    filteredList events prefs
+
+filteredList :: [Event] -> Prefs -> IO [Event]
+filteredList events prefs = do
+    let f      = defaultFilter      prefs
+    let f_nome = pack $ defaultFilterName prefs
+    let f_dia  = defaultFilterDay   prefs
+    let f_mes  = defaultFilterMonth prefs
+    let f_ano  = defaultFilterYear  prefs
+    case f of
+        1 -> return $ filterEventsByCat  f_nome events
+        2 -> return $ filterEventName    f_nome events
+        3 -> return $ filterCloseEvents  f_dia f_mes f_ano events
+        4 -> return $ filterDistantEvets f_dia f_mes f_ano events
+        5 -> return $ filterIsReg events
+        6 -> getEvents
+        _ -> getEvents
+
+savePrefFilter :: Int -> String -> Int -> Int -> Int -> IO ()
+savePrefFilter n s d m y = do
+    prefs <- getPrefs
+    let p_ad = autodelete prefs
+    let p_ds = defaultSort prefs
+    ok <- savePrefs (Prefs p_ad p_ds n s d m y)
+    endDo
+
+savePrefSort :: Int -> IO ()
+savePrefSort n = do
+    prefs <- getPrefs
+    let p_ad = autodelete prefs
+    let p_df = defaultFilter prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    ok <- savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
+    endDo
+
+getSortedList :: [Event] -> IO [Event]
+getSortedList es = do
+    prefs <- getPrefs
+    let n = defaultSort prefs
+    case n of
+        1 -> return $ sortEventsBy "name" es
+        2 -> return $ sortEventsBy "date" es
+        3 -> return $ sortEventsBy "description" es
+        4 -> return $ sortEventsBy "recurrent" es
+        5 -> return es
+        _ -> return es
+
+getProcessedList :: IO [Event]
+getProcessedList = do
+    l <- getCurrentFilteredList
+    getSortedList l
+
+setSortLabel :: Builder -> IO ()
+setSortLabel builder = do
+    prefs <- getPrefs
+    let n = defaultSort prefs
+    setLabelText builder "lbl_Sort" ("Ordenação: " ++ getSortByInt n)
+    endDo
+
+getSortByInt :: Int -> String
+getSortByInt n =
+    case n of
+        1 -> "por nome."
+        2 -> "por data."
+        3 -> "por descrição."
+        4 -> "por recorrência."
+        5 -> "default."
+        _ -> ""
+
+setFilterLabel :: Builder -> IO ()
+setFilterLabel builder = do
+    prefs <- getPrefs
+    let n = defaultFilter prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    setLabelText builder "lbl_Filter" ("Ordenação: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
+    endDo
+
+getFilterByInt :: Int -> String -> Int -> Int -> Int -> String
+getFilterByInt n s x y z=
+    case n of
+        1 -> "por categoria (" ++ s ++ ")."
+        2 -> "por nome (" ++ s ++ ")."
+        3 -> "por eventos anteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
+        4 -> "por evento posteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
+        5 -> "por eventos recorrentes."
+        6 -> "padrão (sem filtro)."
+        _ -> ""
+
 main :: IO ()
 main = do
     initGUI
@@ -63,9 +162,10 @@ main = do
 
     -- Posteriormente ler a tabela de categorias antes de criar os eventos.
     -- Criar função para refresh da data table.
-    loadTable <- getEvents
+    loadTable <- getProcessedList
     insertFromTable loadTable categoriesMap switcher
-    
+    setSortLabel builderMain
+    setFilterLabel builderMain
 
     --Ideia para salvar e posteriormente carregar as configurações do usuário:
     --      Ter funções de sort por propriedade. Isto é, ter uma função que
@@ -84,8 +184,8 @@ main = do
     --hbox <- builderGetObject builder castToVScrollbar "vscrollbar"
 
     -- ADD EVENT ###################################################################################
-    btnAddEvent <- getButton builderMain "btnAddEvent"
-    onClicked btnAddEvent $ do bdAdd <- makeBuilder "./ui/UI_novoEvento.glade"
+    novo <- getAction builderMain "action_novoEvento"
+    onActionActivate novo $ do bdAdd <- makeBuilder "./ui/UI_novoEvento.glade"
                                newEvent <- createEvent bdAdd
                                -- CONFIRM  ##################################################################
                                -- Adiciona o novo evento a uma categoria já existente.
@@ -98,53 +198,94 @@ main = do
                                                         then generateWarningMessage "Preencha todos os campos."
                                                         else do
                                                             addEvent builderMain bdAdd switcher categoriesMap
+                                                            updatedList <- getProcessedList
+                                                            refreshEvents updatedList categoriesMap switcher
                                                             widgetDestroy newEvent
                                                             endDo
                                onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity 
                                                          if isVisible then widgetHide bRegularity  else widgetShow bRegularity
                                                          endDo
                                endDo
-                          -- ###########################################################################
-    -- ##############################################################################################
+                          -- #########################################################################
+    -- ###############################################################################################
 
+    -- ORDENAÇÃO #####################################################################################
+
+    -- Ordenar por nome
+    action_sort_name <- getAction builderMain "ordenar_Nome"
+    onActionActivate action_sort_name $ do updatedList <- getCurrentFilteredList
+                                           refreshEvents (sortEventsBy "name" updatedList) categoriesMap switcher
+                                           savePrefSort 1
+                                           setSortLabel builderMain
+    
+    -- Ordenar por data
+    action_sort_date <- getAction builderMain "ordenar_Data"
+    onActionActivate action_sort_date $ do updatedList <- getCurrentFilteredList
+                                           refreshEvents (sortEventsBy "date" updatedList) categoriesMap switcher
+                                           savePrefSort 2
+                                           setSortLabel builderMain
+
+    -- Ordenar por descrição
+    action_sort_desc <- getAction builderMain "ordenar_Descricao"
+    onActionActivate action_sort_desc $ do updatedList <- getCurrentFilteredList
+                                           refreshEvents (sortEventsBy "description" updatedList) categoriesMap switcher
+                                           savePrefSort 3
+                                           setSortLabel builderMain
+    -- Ordenar por recorrência
+    action_sort_rec <- getAction builderMain "ordenar_Recorrencia"
+    onActionActivate action_sort_rec $ do updatedList <- getCurrentFilteredList
+                                          refreshEvents (sortEventsBy "recurrent" updatedList) categoriesMap switcher
+                                          savePrefSort 4
+                                          setSortLabel builderMain
+
+    -- Volta a lista para a ordenação padrão (ordem de inserção do usuário)
+    action_sort_default <- getAction builderMain "ordenar_None"
+    onActionActivate action_sort_default $ do updatedList <- getCurrentFilteredList
+                                              refreshEvents updatedList categoriesMap switcher
+                                              savePrefSort 5
+                                              setSortLabel builderMain
 
     -- FILTROS ######################################################################################
 
     -- Filtrar por categoria
     action_filter_category <- getAction builderMain "Action_Filtro_Categoria"
     onActionActivate action_filter_category $ do createFilterDialogText 1 categoriesMap switcher
+                                                 setFilterLabel builderMain
 
     -- Filtrar por nome do evento
     action_filter_name <- getAction builderMain "Action_Filtro_Nome"
     onActionActivate action_filter_name $ do createFilterDialogText 2 categoriesMap switcher
+                                             setFilterLabel builderMain
 
     -- Filtrar por evento mais próximo
     action_filter_closer <- getAction builderMain "Action_Filtro_MaisProx"
     onActionActivate action_filter_closer $ do createFilterDialogDate 1 categoriesMap switcher
+                                               setFilterLabel builderMain
 
     -- Filtrar por evento mais distante
     action_filter_further <- getAction builderMain "Action_Filtro_MaisDist"
     onActionActivate action_filter_further $ do createFilterDialogDate 2 categoriesMap switcher
+                                                setFilterLabel builderMain
 
     -- Filtrar eventos que possuem descrição
     action_filter_description <- getAction builderMain "Action_Filtro_Desc"
     onActionActivate action_filter_description $ do updatedTable <- getEvents
                                                     refreshEvents (filterHasDesc updatedTable) categoriesMap switcher
+                                                    setFilterLabel builderMain
 
     -- Filtrar eventos que são recorrentes
     action_filter_recurrency <- getAction builderMain "Action_Filtro_Recorrencia"
     onActionActivate action_filter_recurrency $ do updatedTable <- getEvents
                                                    refreshEvents (filterIsReg updatedTable) categoriesMap switcher
+                                                   savePrefFilter 5 "" 0 0 0
+                                                   setFilterLabel builderMain
 
     -- Remover filtros
     action_filter_remove <- getAction builderMain "Action_Filtro_Remover"
     onActionActivate action_filter_remove $ do updatedTable <- getEvents
                                                refreshEvents updatedTable categoriesMap switcher
-
-    --Exemplo de como capturar a ação de um botão do submenu. Note que no glade tivemos que associar uma nova ação ao item.
-    --action <- builderGetObject builderMain castToAction "action1"
-    --onActionActivate action $ do (putStrLn "test")
-
+                                               savePrefFilter 6 "" 0 0 0
+                                               setFilterLabel builderMain
 
     -- ##############################################################################################
 
@@ -185,8 +326,12 @@ createFilterDialogDate n ht switcher = do
                                 let vMes' = fromInteger $ truncate vMes
                                 let vAno' = fromInteger $ truncate vAno
                                 if n == 1
-                                    then refreshEvents (filterCloseEvents  vDia' vMes' vAno' updatedTable) ht switcher
-                                    else refreshEvents (filterDistantEvets vDia' vMes' vAno' updatedTable) ht switcher
+                                    then do
+                                        refreshEvents (filterCloseEvents  vDia' vMes' vAno' updatedTable) ht switcher
+                                        savePrefFilter 3 "" vDia' vMes' vAno'
+                                    else do
+                                        refreshEvents (filterDistantEvets vDia' vMes' vAno' updatedTable) ht switcher
+                                        savePrefFilter 4 "" vDia' vMes' vAno'
                                 widgetDestroy window
 
 
@@ -212,8 +357,12 @@ createFilterDialogText n ht switcher = do
     onClicked btnConfirmar $ do text <- getTextFromEntry builder "filterText"
                                 updatedTable <- getEvents
                                 if n == 1
-                                    then refreshEvents (filterEventsByCat (pack text) updatedTable) ht switcher
-                                    else refreshEvents (filterEventName   (pack text) updatedTable) ht switcher
+                                    then do
+                                        refreshEvents (filterEventsByCat (pack text) updatedTable) ht switcher
+                                        savePrefFilter 1 text 0 0 0
+                                    else do
+                                        refreshEvents (filterEventName   (pack text) updatedTable) ht switcher
+                                        savePrefFilter 2 text 0 0 0
                                 widgetDestroy window
 
 
@@ -241,9 +390,19 @@ createCategory s ht parent = do
     categoryBuilder <- makeBuilder "./ui/UI_Categoria.glade"
     fixedBox <- getFixed categoryBuilder "mainFixed"
     lblCategory <- getLabel categoryBuilder "lblCategoryTitle"
+    colorButton <- builderGetObject categoryBuilder castToColorButton "btnColor"
+    background <- builderGetObject categoryBuilder castToEventBox "eventbox1"
+    background' <- builderGetObject categoryBuilder castToViewport "viewport1"
     labelSetText lblCategory s
     H.insert ht s categoryBuilder
     notebookAppendPage parent fixedBox s
+
+
+    onColorSet colorButton $ do color <- colorButtonGetColor colorButton
+                                widgetModifyBg background StateNormal color
+                                widgetModifyBg background' StateNormal color
+                                putStrLn $ "Cor da categoria alterada com sucesso. " ++ show color
+
     return categoryBuilder
 
 --Retorna o builder de uma categoria. Assim, pode-se ter acesso a todos os seus elementos.
@@ -294,19 +453,19 @@ addEvent bMain bEvento switcher ht = do
     categoria    <- getTextFromEntry bEvento "txtBoxCategory"
     eventForm    <- toEventForm bEvento
     --Adicionar aqui função para salvar eventForm no csv.
-    insertToFile eventPath eventForm
+    Lib.insertEvent eventForm
     isValid      <- categoryExists categoria ht
     if not isValid
         then do
             --Caso não exista a categoria, criamos uma nova categoria.
             bCategoria <- createCategory categoria ht switcher
-            insertEvent eventForm ht
+            Main.insertEvent eventForm ht switcher
             putStrLn "Categoria criada."
             --Adicionamos dentro desta categoria o novo evento.
             endDo
         else do
             --A categoria já existe. Basta que se pegue a referência e adicionemos o evento à vertical box.
-            insertEvent eventForm ht
+            Main.insertEvent eventForm ht switcher
             putStrLn ""
 
 --Pega um builder e retorna os campos na forma de evento.
@@ -382,15 +541,15 @@ insertFromTable (x:xs) ht switcher = do
     if not isValid
         then do
             cat <- createCategory nCategory ht switcher
-            insertEvent x ht
+            Main.insertEvent x ht switcher
             endDo
-        else insertEvent x ht
+        else Main.insertEvent x ht switcher
     insertFromTable xs ht switcher
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
-insertEvent :: Event -> HashTable String Builder -> IO ()
-insertEvent event ht = do
+insertEvent :: Event -> HashTable String Builder -> Notebook -> IO ()
+insertEvent event ht switcher = do
     --Captura todas as informações relevantes para construir o widget.
     let nName        = unpack $ name event
     let nDay         = day event
@@ -420,20 +579,40 @@ insertEvent event ht = do
 
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
-    onClicked btnEditar $ do putStrLn "Função de editar ainda não construída."
-                            {-bEdit <- makeBuilder "./ui/UI_editarEvento.glade"
+    onClicked btnEditar $ do bEdit <- makeBuilder "./ui/UI_editarEvento.glade"
                              bEditWindow <- builderGetObject bEdit castToDialog "editEventWindow"
                              setTextBoxText bEdit "txtBoxEvent" nName
                              setTextBoxText bEdit "txtBoxDescription" nDescription
                              setTextBoxText bEdit "txtBoxCategory" nCategory
                              widgetShow bEditWindow
-                             -}
+
+                             btnEdit <- getButton bEdit "btnEditar"
+                             onClicked btnEdit $ do deleteEventFromFile nName
+                                                    editedEvent <- toEventForm bEdit
+                                                    Lib.insertEvent editedEvent
+                                                    updatedList <- getProcessedList
+                                                    refreshEvents updatedList ht switcher
+                                                    widgetDestroy bEditWindow
+                                                    b <- containerGetChildren categoriesBox
+
+                                                    if Prelude.length b == 0
+                                                        then do page <- getFixed categoriaBuilderRef "mainFixed"
+                                                                widgetDestroy page
+                                                                --Adicionar aqui o evento para remover a CATEGORIA do csv.
+                                                                endDo
+                                                        else endDo
+
+
+                             btnCancelar <- getButton bEdit "btnCancelar"
+                             onClicked btnCancelar $ do widgetDestroy bEditWindow
+
                              endDo
 
     btnExcluir <- getButton bLinhaEvento "btnExcluir"
     onClicked btnExcluir $ do widgetDestroy newEvento
                               --Adicionar aqui o evento para remover o EVENT do csv.
                               b <- containerGetChildren categoriesBox
+                              _ <- deleteEventFromFile nName
                               if Prelude.length b == 0
                                 then do page <- getFixed categoriaBuilderRef "mainFixed"
                                         widgetDestroy page
