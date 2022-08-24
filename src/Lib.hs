@@ -60,7 +60,21 @@ import qualified Data.Foldable as Foldable
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BL
 
+-- Biblioteca para ler CSV
 import Data.Csv as Cassava
+    ( DefaultOrdered(..),
+      FromField(..),
+      FromNamedRecord(..),
+      ToField(..),
+      ToNamedRecord(..),
+      Header,
+      (.:),
+      (.=),
+      header,
+      namedRecord,
+      decodeByName,
+      encodeByName,
+      encodeDefaultOrderedByName )
 
 import Data.Text (Text, isInfixOf, pack, drop, take)
 import qualified Data.Text.Encoding as Text
@@ -68,7 +82,6 @@ import qualified Data.Text.Encoding as Text
 import Graphics.UI.Gtk ( Color(..) )
 import Data.List (sortOn, groupBy)
 
---Importado para ser usado no Cassanva.decodeByName
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Either (fromRight)
@@ -439,7 +452,7 @@ filterEventsBy method v es
 -- Leva em conta se o Evento é recorrente ou não, e se ele já aconteceu ou vai acontecer
 daysleft :: Event -> (Integer, Int, Int) -> Int
 daysleft e (ty, tm, td)
---  Caso o evento for recorrente, e a data armazenada já tiver passado, mostro a próxima ocorrencia
+  -- Caso o evento for recorrente, e a data armazenada já tiver passado, mostro a próxima ocorrencia
   | recurrent e && diff /= abs diff = nextDay
   | otherwise                       = diff
   where
@@ -456,6 +469,7 @@ daysleft e (ty, tm, td)
 dateToWeekDay :: Int -> Int -> Int -> String
 dateToWeekDay d m y = string
   where
+    -- Fórmula para saber o dia da semana de uma data d/m/y no calendário gregoriano
     y0 =  y - (14 - m) `div` 12
     x = y0 + y0 `div` 4 - y0 `div` 100 + y0 `div` 400
     m0 = m + 12 * ((14 - m) `div` 12) - 2
@@ -474,16 +488,21 @@ dateToWeekDay d m y = string
 -- Se a String recebida não for uma das predefinidas, a lista é retornada sem alterações
 sortEventsBy :: String -> [Event] -> [Event]
 sortEventsBy method es
+ -- Ordem alfabética
  | method == "name"        = sortOn name es
+ -- Ordena alfabeticamente as categorias, e alfabeticamente o nome de cada evento de uma mesma categorias
  | method == "category"    = sortByCategory es
+ -- Data mais antiga para a mais recente
  | method == "date"        = sortByDate es
+ -- Coloca os eventos recorrentes na frente, sem alterar a ordem entre eles ou entre os que não são recorrentes
  | method == "recurrent"   = filterIsReg es   ++ [e | e <- es, not $ recurrent e]
+ -- Ordem com a mesma ideia dos eventos receorrentes, porem o critério agora é ter descrição
  | method == "description" = filterHasDesc es ++ [e | e <- es, description e == ""]
  | otherwise               = es
 
 -- Reordena a lista de eventos de acordo com o mais antigo para o mais recente.
 -- Primeiro os eventos devem ser ordenados pelo ano. Depois agrupados em listas para cada ano que houver.
--- Então podem ser organizados por mes, e o process oé repetido para os dias.
+-- Então podem ser organizados por mes, e o processo é repetido para os dias.
 sortByDate :: [Event] -> [Event]
 sortByDate es = concat $ concat dsorted
   where
@@ -514,89 +533,27 @@ listsOfDates getter (e:es)
  | getter e == getter (head es) = (e : [head es]) : listsOfDates getter (tail es)
  | otherwise                    = [e] : listsOfDates getter es
 
+-- Compara se dois eventos tem anos iguais
 yearEq :: Event -> Event -> Bool
 yearEq e1 e2 = year e1 == year e2
 
+-- Compara se dois eventos tem meses iguais
 monthEq :: Event -> Event -> Bool
 monthEq e1 e2 = month e1 == month e2
 
+-- COmpara se dois eventos tem a mesma categoria
 catEq :: Event -> Event -> Bool
 catEq e1 e2 = category e1 == category e2
 
--- Função auxiliar. Recebe varias listas de algum ADT e organiza cada uma delas de acordo com o campo informado
+-- Função auxiliar. Recebe varias listas de algum ADT e organiza cada uma delas de acordo com o campo do adt informado
 listsSort :: Ord field => (adt -> field) -> [[adt]] -> [[adt]]
-listsSort getter = map (sortOn getter)
+listsSort getter = map $ sortOn getter
 
 -- Função auxiliar. Ordena cada lista individualmente por dia.
 sortByDay :: [[[Event]]] -> [[[Event]]]
-sortByDay = map (map (sortOn day))
+sortByDay = map $ listsSort day
 
-testrecord :: ByteString
-testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
-
-{-
-eventrecord :: Event
-eventrecord =
-  Item { name     = "depoisDeAmanha"
-    , day         = 04
-    , month       = 05
-    , year        = 2000
-    , description = "insert desc"
-    , category    = "none"
-    , recurrent   = True
-    , regularity  = 7
-    , color       = "#EEEEEE"
-  }
-
-eventrecord2 :: Event
-eventrecord2 =
-  Item { name     = "AntesdeHoje"
-    , day         = 10
-    , month       = 05
-    , year        = 2000
-    , description = "insert desc"
-    , category    = "none"
-    , recurrent   = True
-    , regularity  = 7
-    , color       = "#EEEEEE"
-  }
-
-eventrecord3 :: Event
-eventrecord3 =
-  Item { name     = "depoisDeAmanha"
-    , day         = 28
-    , month       = 05
-    , year        = 2000
-    , description = "insert desc"
-    , category    = "none"
-    , recurrent   = False
-    , regularity  = 7
-    , color       = "#EEEEEE"
-  }
-
-eventrecord4 :: Event
-eventrecord4 =
-  Item { name     = "AntesdeHoje"
-    , day         = 02
-    , month       = 10
-    , year        = 2023
-    , description = "insert desc"
-    , category    = "none"
-    , recurrent   = False
-    , regularity  = 7
-    , color       = "#EEEEEE"
-  }
--}
-main :: IO ()
-main = do
-  --Tutorial de 2 segundos na pag inicial da biblioteca
-  {-csvData <- BL.readFile "./csv/teste.csv"
-  case decode NoHeader csvData of
-    Left err -> putStrLn err
-    Right v -> Vector.forM_ v $ \ (col1, col2, col3) ->
-      putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3-}
-  let prefes = mkPrefs True 0 0 "a" 0 0 0
-
-  a <- getPrefs
-
-  print a
+-- Função para Quando o Evento deve receber uma cor automaticamente conforme a data se aproxima.
+-- Recebe a quantidade de dias até a data e retorna uma cor em função dela
+gradient :: Int -> Color
+gradient v = Color (50000 - read (show v) * 100) (8000 + read (show v) * 100) (8000 + read (show v) * 50)
