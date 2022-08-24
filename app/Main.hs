@@ -121,7 +121,7 @@ setFilterLabel builder = do
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
-    setLabelText builder "lbl_Filter" ("Ordenação: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
+    setLabelText builder "lbl_Filter" ("Filtro: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
     endDo
 
 getFilterByInt :: Int -> String -> Int -> Int -> Int -> String
@@ -287,6 +287,12 @@ main = do
                                                savePrefFilter 6 "" 0 0 0
                                                setFilterLabel builderMain
 
+    -- ##############################################################################################
+
+    -- OUTROS BOTÕES DO MENU SUPERIOR ###############################################################
+    action_sair <- getAction builderMain "action_Sair"
+    onActionActivate action_sair $ do liftIO mainQuit >> return False
+                                      endDo
     -- ##############################################################################################
 
     --Mostra todos os widgets presentes em window.
