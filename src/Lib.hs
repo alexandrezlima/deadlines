@@ -2,21 +2,35 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- TODO: Cores na GUI; AutoDelete; Prefs de campos pra visualizar
+-- TODO: Cores na GUI; Prefs de campos pra visualizar
 
 {-
+##################################################################################################
+
 ADTS:
+
+##################################################################################################
+
 Prefs
 Category
 Event
 ColorSrc
 
+##################################################################################################
+
 Variaveis úteis:
 
+##################################################################################################
+
+prefsPath    :: FilePath
 categoryPath :: FilePath
 eventPath    :: FilePath
 
+##################################################################################################
+
 Funções úteis:
+
+##################################################################################################
 
 getToday :: IO (Integer, Int, Int)
 
@@ -48,13 +62,17 @@ filterIsReg        :: [Event] -> [Event]
 
 sortEventsBy :: String -> [Event] -> [Event]
 sortEventsBy method es
-Ver os comentarios na função para ver qual string passar
+
+##################################################################################################
 -}
 
 module Lib where
 
+-- Usado na hora de ler e salvar informações nos arquivos
 import Control.Exception (IOException)
 import qualified Control.Exception as Exception
+
+-- Usado para transformar os Vector que o cassava retorna em listas []
 import qualified Data.Foldable as Foldable
 
 import Data.ByteString.Lazy (ByteString)
@@ -62,42 +80,39 @@ import qualified Data.ByteString.Lazy as BL
 
 -- Biblioteca para ler CSV
 import Data.Csv as Cassava
-    ( DefaultOrdered(..),
-      FromField(..),
-      FromNamedRecord(..),
-      ToField(..),
-      ToNamedRecord(..),
-      Header,
-      (.:),
-      (.=),
-      header,
-      namedRecord,
-      decodeByName,
-      encodeByName,
-      encodeDefaultOrderedByName )
+    ( DefaultOrdered(..)
+    , FromField(..)
+    , FromNamedRecord(..)
+    , ToField(..)
+    , ToNamedRecord(..)
+    , Header
+    , (.:)
+    , (.=)
+    , header
+    , namedRecord
+    , decodeByName
+    , encodeByName
+    , encodeDefaultOrderedByName
+    )
 
-import Data.Text (Text, isInfixOf, pack, drop, take)
+import Data.Text (Text, isInfixOf, pack, unpack)
 import qualified Data.Text.Encoding as Text
 
-import Graphics.UI.Gtk ( Color(..) )
+import Graphics.UI.Gtk (Color(..))
 import Data.List (sortOn, groupBy)
 
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+
+-- Usado para acessar o Vector que é retornado pelo Cassava
 import Data.Either (fromRight)
 
 import Data.Time.Clock    (getCurrentTime, UTCTime(utctDay))
 import Data.Time.Calendar (diffDays, fromGregorian, toGregorian)
+import Data.Word (Word16)
 
--- DataType que representa um registro do meu csv
-{-
-Se ouvesse um ADT customizado aqui, ao inves de 'Text',
-seria necessario fazer um:
-instance FromField adtName
-instance ToField adtName
-
-Para o cassava saber como transformar esse ADT em uma parte do registro csv e vice versa
--}
+prefsPath :: FilePath
+prefsPath = "./csv/prefs.csv"
 
 categoryPath :: FilePath
 categoryPath = "./csv/categories.csv"
@@ -105,13 +120,13 @@ categoryPath = "./csv/categories.csv"
 eventPath :: FilePath
 eventPath = "./csv/events.csv"
 
-prefsPath :: FilePath
-prefsPath = "./csv/prefs.csv"
-
--- Devolve o (ano, mes, dia)
+-- Devolve o (ano, mes, dia) de hoje de acordo com o sistema operacional
 getToday :: IO (Integer, Int, Int)
 getToday = getCurrentTime >>= return . toGregorian . utctDay
 
+-- O usuário poderá optar por algumas preferências, que são armazenadas em um csv através desse Adt
+-- Ele poderá escolher se os eventos que passarem vão ser deletados automaticamente
+-- Ele também poderá escolher um filtro e uma ordem padrão para a exibição dos eventos
 data Prefs =
   Prefs
     { autodelete         :: Bool
@@ -124,6 +139,7 @@ data Prefs =
     }
     deriving Show
 
+-- ADT que serve para armazenar quais as cores de cada categoria de eventos
 data Category =
   Category
     { catName  :: Text
@@ -131,6 +147,9 @@ data Category =
     }
   deriving Show
 
+-- ADT principal do projeto. Guarda todas as informações necessárias sobre um evento para que o programa possa funcionar corretamente
+-- Regularidade é o intervalo de dias que demora para um evento recorrente acontecer outra vez
+-- Cada evento pertencerá a uma categoria para ficarem melhor organizados
 data Event =
   Item
     { name        :: Text
@@ -145,7 +164,7 @@ data Event =
     }
   deriving (Eq, Show)
 
--- ADT que indica a fonte de onde o evento recebe sua cor. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixa para a cor ser ajustada automaticamente conforme a data se aproxima.
+-- ADT que indica a fonte de onde o evento recebe sua cor quando mostrado na GUI. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixar para a cor ser ajustada automaticamente conforme a data se aproxima.
 data ColorSrc = Custom Text | CatName | Gradient deriving (Eq, Show)
 
 instance FromNamedRecord Prefs where
@@ -170,12 +189,13 @@ instance FromNamedRecord Category where
 instance FromNamedRecord Event where
   parseNamedRecord m =
     Item
+      -- Decote latin para os campos que possuem texto terem uma abrangencia maior de caracteres
       <$> fmap Text.decodeLatin1 (m .: "name")
       <*> m .: "day"
       <*> m .: "month"
       <*> m .: "year"
-      <*> m .: "description"
-      <*> m .: "category"
+      <*> fmap Text.decodeLatin1 (m .: "description")
+      <*> fmap Text.decodeLatin1 (m .: "category")
       <*> m .: "recurrent"
       <*> m .: "regularity"
       <*> m .: "color"
@@ -185,18 +205,14 @@ instance FromField Bool where
   parseField "True" = pure True
   parseField _      = pure False
 
--- Usado para o Cassava saber como ler o que esta escrito no CSV e transformar no meu ADT de Cor. Se a string que estiver nesse campo não for 'Category' nem 'Gradient, ela sera um código hexadecimal, que sera transferido para minha cor Custom.
+-- Usado para o Cassava saber como ler o que esta escrito no CSV e transformar no meu ADT de Cor. Se a string que estiver nesse campo não for 'Category' nem 'Gradient, ela sera um código, que sera transferido para minha cor Custom.
 instance FromField ColorSrc where
   parseField "Category" = pure CatName
   parseField "Gradient" = pure Gradient
   parseField othertype  = Custom <$> parseField othertype
 
---instance FromField Color where
---  parseField hexcode = pure (Color (substring 0 1 hexcode) (substring 0 1 hexcode) (substring 0 1 hexcode))
-
-substring :: Int -> Int -> Text -> Text
-substring start len = Data.Text.take len . Data.Text.drop start
-
+-- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header).
+-- Se o ADT tiver um outro ADT dentro dele, é necessário fazer instancia de ToField
 instance ToNamedRecord Prefs where
   toNamedRecord Prefs{..} =
     Cassava.namedRecord
@@ -218,7 +234,6 @@ instance ToNamedRecord Category where
     , "catcolor" .= catColor
     ]
 
--- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header). Se o ADT tiver um outro ADT dentro dele, tbm é necessário 
 instance ToNamedRecord Event where
   toNamedRecord Item{..} =
     Cassava.namedRecord
@@ -234,17 +249,18 @@ instance ToNamedRecord Event where
       , "color"       .= color
       ]
 
+-- Instancia para o cassava saber como transformar a string que leu no CSV para o Adt do haskell
 instance ToField Bool where
   toField True  = "True"
   toField False = "False"
 
+-- Instancia para o cassava saber como transformar a string que leu no CSV para o Adt do haskell
 instance ToField ColorSrc where
   toField Gradient      = "Gradient"
   toField CatName       = "Category"
   toField (Custom text) = toField text
 
---instance ToField Color where
-
+-- Diz para o Cassava a ordem padrão do header de Prefs
 instance DefaultOrdered Prefs where
   headerOrder _ =
     Cassava.header
@@ -257,7 +273,7 @@ instance DefaultOrdered Prefs where
       , "defaultFilterYear"
       ]
 
--- Diz para o Cassava a ordem padrão do header das categorias
+-- Diz para o Cassava a ordem padrão do header de Category
 instance DefaultOrdered Category where
   headerOrder _ =
     Cassava.header
@@ -280,6 +296,7 @@ instance DefaultOrdered Event where
       , "color"
       ]
 
+-- Header que deveria ser usado caso o ADT não fosse uma instancia de DefaultOrdered 
 prefsHeader :: Header
 prefsHeader = Vector.fromList ["autodelete", "defaultSort", "defaultFilter", "defaultFilterName", "defaultFilterDay", "defaultFilterMonth", "defaultFilterYear"]
 
@@ -300,7 +317,7 @@ mkCategory n c = Category {catName = n, catColor = c}
 mkEvent :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> Int -> ColorSrc -> Event
 mkEvent n d m y desc cat re reg c = Item {name = n, day = d, month = m, year = y,  description = desc, category = cat, recurrent = re, regularity = reg, color = c}
 
--- Dado que tenho um Header fixo, a função codifica o ADT para o formato csv
+-- Dado que tenho um Header fixo, a função codifica o ADT para uma stream no formato csv
 encodeAdt :: ToNamedRecord adt => [adt] -> ByteString
 encodeAdt = Cassava.encodeByName eventHeader
 
@@ -308,18 +325,23 @@ encodeAdt = Cassava.encodeByName eventHeader
 encodeAdt' :: (DefaultOrdered adt, ToNamedRecord adt) => [adt] -> ByteString
 encodeAdt' = Cassava.encodeDefaultOrderedByName
 
+-- Uso encodeAdt' para transformar o conteudo da lista de Adt's para o formato certo e BL.writeFile  escreve no path informado
 encodeToFile :: (DefaultOrdered adt, ToNamedRecord adt) => FilePath -> [adt] -> IO (Either String ())
 encodeToFile filePath = catchShowIO . BL.writeFile filePath . encodeAdt'
 
+-- Recebo a stream do aquivo e uso a função do Cassa para decodificar o arquivo. A função retorna com um header, mas este é descartado
 decodeAdt :: FromNamedRecord adt => ByteString -> Either String (Vector adt)
 decodeAdt = fmap snd . Cassava.decodeByName
 
+-- Leio o arquivo em prefsPath e aplico nele a função decodeAdt
 decodePrefsFromFile :: IO (Either String (Vector Prefs))
 decodePrefsFromFile = catchShowIO (BL.readFile prefsPath) >>= return . either Left decodeAdt
 
+-- Leio o arquivo em categoryPath e aplico nele a função decodeAdt
 decodeCategoriesFromFile :: IO (Either String (Vector Category))
 decodeCategoriesFromFile = catchShowIO (BL.readFile categoryPath) >>= return . either Left decodeAdt
 
+-- Leio o arquivo em eventPath e aplico nele a função decodeAdt
 decodeEventsFromFile :: IO (Either String (Vector Event))
 decodeEventsFromFile = catchShowIO (BL.readFile eventPath) >>= return . either Left decodeAdt
 
@@ -443,11 +465,6 @@ filterHasDesc es = [e | e <- es, description e /= ""]
 filterIsReg :: [Event] -> [Event]
 filterIsReg es = [e | e <- es, recurrent e]
 
-filterEventsBy :: String -> Text -> [Event] -> [Event]
-filterEventsBy method v es
- | method == "category" = filterEventsByCat v es
- | otherwise = es
-
 -- Recebe um evento e uma triple representando o dia de hoje, e calcula quantos dias faltam para o evento
 -- Leva em conta se o Evento é recorrente ou não, e se ele já aconteceu ou vai acontecer
 daysleft :: Event -> (Integer, Int, Int) -> Int
@@ -456,12 +473,15 @@ daysleft e (ty, tm, td)
   | recurrent e && diff /= abs diff = nextDay
   | otherwise                       = diff
   where
+    -- Extraio os dados do evento recebido
     d     = day e
     m     = month e
     y     = toInteger $ year e
+    -- Transformo a tripla recebida em um Day
     today = fromGregorian ty tm td
+    -- Agora é possível calcular a diferença de dias
     diff  = fromInteger $ diffDays (fromGregorian y m d) today
-    -- Caso seja um evento regular
+    -- Caso seja um evento regular, reg é o intervalo de tempo para o evento ocorrer outra vez
     reg     = regularity e
     nextDay = diff `mod` reg
 
@@ -496,7 +516,7 @@ sortEventsBy method es
  | method == "date"        = sortByDate es
  -- Coloca os eventos recorrentes na frente, sem alterar a ordem entre eles ou entre os que não são recorrentes
  | method == "recurrent"   = filterIsReg es   ++ [e | e <- es, not $ recurrent e]
- -- Ordem com a mesma ideia dos eventos receorrentes, porem o critério agora é ter descrição
+ -- Ordem com a mesma ideia dos eventos recorrentes, porém o critério agora é ter descrição
  | method == "description" = filterHasDesc es ++ [e | e <- es, description e == ""]
  | otherwise               = es
 
@@ -507,8 +527,11 @@ sortByDate :: [Event] -> [Event]
 sortByDate es = concat $ concat dsorted
   where
     ysorted     = sortOn year es
+    -- Agrupo todos os anos da lista de eventos que são iguais
     yearGroups  = groupBy yearEq ysorted
+    -- Cada lista esta agrupada por ano. Agora cada uma é organizada pelo mes
     msorted     = listsSort month yearGroups
+    -- Agora aplico groupBy em cada uma das listas agrupadas por ano e tenho listas agrupadas por ano e mes
     monthGroups = map (groupBy monthEq) msorted
     dsorted     = sortByDay monthGroups
 
@@ -553,7 +576,31 @@ listsSort getter = map $ sortOn getter
 sortByDay :: [[[Event]]] -> [[[Event]]]
 sortByDay = map $ listsSort day
 
+-- A partir do nome de uma categoria, procuro por ela em uma lista de categorias e retorno sua cor. Util para a GUI
+findCatColor :: [Category] -> String -> String
+findCatColor cs n = head color
+  where
+    color = [unpack $ catColor c | c <- cs, catName c == pack n]
+
 -- Função para Quando o Evento deve receber uma cor automaticamente conforme a data se aproxima.
 -- Recebe a quantidade de dias até a data e retorna uma cor em função dela
 gradient :: Int -> Color
-gradient v = Color (50000 - read (show v) * 100) (8000 + read (show v) * 100) (8000 + read (show v) * 50)
+gradient v = Color red green blue
+  where
+    speed = 400
+    red   = max 0     (45000 - (read (show v) * 2 * speed))
+    green = min 65535 (8000 + (read (show v) * speed))
+    blue  = min 32767 (8000 + (read (show v) * (speed `div` 2)))
+
+wmax :: Word16 -> Word16 -> Word16
+wmax a b
+ | a > b = a
+ | otherwise = b
+
+wmin :: Word16 -> Word16 -> Word16
+wmin a b
+ | a < b = a
+ | otherwise = b
+
+main = do
+  print (max 0 (-200 :: Word16))
