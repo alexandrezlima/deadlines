@@ -585,22 +585,9 @@ findCatColor cs n = head color
 -- Função para Quando o Evento deve receber uma cor automaticamente conforme a data se aproxima.
 -- Recebe a quantidade de dias até a data e retorna uma cor em função dela
 gradient :: Int -> Color
-gradient v = Color red green blue
+gradient x = Color red green blue
   where
-    speed = 400
-    red   = max 0     (45000 - (read (show v) * 2 * speed))
-    green = min 65535 (8000 + (read (show v) * speed))
-    blue  = min 32767 (8000 + (read (show v) * (speed `div` 2)))
-
-wmax :: Word16 -> Word16 -> Word16
-wmax a b
- | a > b = a
- | otherwise = b
-
-wmin :: Word16 -> Word16 -> Word16
-wmin a b
- | a < b = a
- | otherwise = b
-
-main = do
-  print (max 0 (-200 :: Word16))
+    speed = 1200
+    red   = read $ show $ max 8000  (45000 - (x * 2 * speed))
+    green = read $ show $ min 30000 (8000  + (x * speed))
+    blue  = read $ show $ min 17500 (8000  + (x * (speed `div` 2)))
