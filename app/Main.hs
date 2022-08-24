@@ -64,7 +64,34 @@ savePrefFilter n s d m y = do
     prefs <- getPrefs
     let p_ad = autodelete prefs
     let p_ds = defaultSort prefs
-    ok <- savePrefs (Prefs p_ad p_ds n s d m y)
+    savePrefs (Prefs p_ad p_ds n s d m y)
+    endDo
+
+saveAutodelete :: Bool -> IO ()
+saveAutodelete b = do
+    prefs <- getPrefs
+    let p_df = defaultFilter prefs
+    let p_ds = defaultSort prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
+    if b then removeExpiredEvents else endDo
+
+removeExpiredEvents :: IO ()
+removeExpiredEvents = do
+    events <- getEvents
+    hoje <- getToday
+    let k = [x | x <- events, daysleft x hoje < 0] --Cria uma lista com todos os eventos com data negativa.
+    let k' = Prelude.map deleteExpired k
+    putStrLn $ show (Prelude.length k)
+    endDo
+
+deleteExpired :: Event -> IO ()
+deleteExpired e = do
+    let nome = unpack (name e)
+    _ <- deleteEventFromFile nome
     endDo
 
 savePrefSort :: Int -> IO ()
@@ -76,8 +103,12 @@ savePrefSort n = do
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
-    ok <- savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
+    savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
     endDo
+
+getAutodelete :: IO Bool
+getAutodelete = do
+    autodelete <$> getPrefs
 
 getSortedList :: [Event] -> IO [Event]
 getSortedList es = do
@@ -95,6 +126,14 @@ getProcessedList :: IO [Event]
 getProcessedList = do
     l <- getCurrentFilteredList
     getSortedList l
+
+
+setAutodeleteLabel :: Builder -> IO()
+setAutodeleteLabel builder = do
+    prefs <- getPrefs
+    let b = autodelete prefs
+    setLabelText builder "lbl_AutoDelete" ("Autodeletar datas atingidas: " ++ show b)
+    endDo
 
 setSortLabel :: Builder -> IO ()
 setSortLabel builder = do
@@ -132,7 +171,7 @@ getFilterByInt n s x y z=
         3 -> "por eventos anteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
         4 -> "por evento posteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
         5 -> "por eventos recorrentes."
-        6 -> "padrão (sem filtro)."
+        6 -> "default (sem filtro)."
         _ -> ""
 
 main :: IO ()
@@ -156,7 +195,7 @@ main = do
     --                  talvez adicionar o parâmetro de cor? Depende de como podemos controlá-lo.
     -- Após adicionar todas as categorias, pegar o arquivo que lê todos os eventos, 
     -- ir de categoria em categoria adicionando-os às suas correspondentes categorias, usando insertEvent.
-    
+
     --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
     categoriesMap <- makeHashTable
 
@@ -166,13 +205,14 @@ main = do
     insertFromTable loadTable categoriesMap switcher
     setSortLabel builderMain
     setFilterLabel builderMain
+    setAutodeleteLabel builderMain
 
     --Ideia para salvar e posteriormente carregar as configurações do usuário:
     --      Ter funções de sort por propriedade. Isto é, ter uma função que
     --      recebe uma lista, uma string que corresponde ao nome da coluna (ex: nome, data, etc)
     --      retorna a mesma lista só que organizada de acordo com a propriedade fornecida.
     --Na hora de popular a tabela, resta apenas passar o vetor organizado como parâmetro.
-    
+
 
     --Para criar e adicionar uma nova categoria, basta chamar a função createCategory.
     --Tal função espera como parâmetro o nome da categoria, a hashtable e o parent.
@@ -202,7 +242,7 @@ main = do
                                                             refreshEvents updatedList categoriesMap switcher
                                                             widgetDestroy newEvent
                                                             endDo
-                               onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity 
+                               onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity
                                                          if isVisible then widgetHide bRegularity  else widgetShow bRegularity
                                                          endDo
                                endDo
@@ -217,7 +257,7 @@ main = do
                                            refreshEvents (sortEventsBy "name" updatedList) categoriesMap switcher
                                            savePrefSort 1
                                            setSortLabel builderMain
-    
+
     -- Ordenar por data
     action_sort_date <- getAction builderMain "ordenar_Data"
     onActionActivate action_sort_date $ do updatedList <- getCurrentFilteredList
@@ -293,6 +333,14 @@ main = do
     action_sair <- getAction builderMain "action_Sair"
     onActionActivate action_sair $ do liftIO mainQuit >> return False
                                       endDo
+
+    action_autodelete <- getAction builderMain "action_Autodelete"
+    onActionActivate action_autodelete $ do autodel <- getAutodelete
+                                            saveAutodelete (not autodel)
+                                            updatedList <- getProcessedList
+                                            refreshEvents updatedList categoriesMap switcher
+                                            setAutodeleteLabel builderMain
+                                            endDo
     -- ##############################################################################################
 
     --Mostra todos os widgets presentes em window.
@@ -317,10 +365,10 @@ createFilterDialogDate n ht switcher = do
     mes' <- getSpin builder "spin_mes"
     ano' <- getSpin builder "spin_ano"
 
-    if n == 1 
+    if n == 1
         then setLabelText builder "lblTitulo" "Filtrar eventos anteriores a: "
         else setLabelText builder "lblTitulo" "Filtrar eventos posteriores a:"
-    
+
     --Botão cancelar.
     onClicked btnCancelar $ do widgetDestroy window
 
@@ -353,10 +401,10 @@ createFilterDialogText n ht switcher = do
     btnCancelar  <- getButton builder "btn_cancelar"
     btnConfirmar <- getButton builder "btn_confirmar"
 
-    if n == 1 
+    if n == 1
         then setLabelText builder "lblTitulo" "Categoria:"
         else setLabelText builder "lblTitulo" "Eventos que contém o seguinte texto:"
-    
+
     --Botão cancelar.
     onClicked btnCancelar $ do widgetDestroy window
 
@@ -544,13 +592,21 @@ insertFromTable [] _ _            = endDo
 insertFromTable (x:xs) ht switcher = do
     let nCategory = unpack $ category x
     isValid <- categoryExists nCategory ht
-    if not isValid
+    autodel <- getAutodelete
+    hoje <- getToday
+    if autodel && (daysleft x hoje) < 0
         then do
-            cat <- createCategory nCategory ht switcher
-            Main.insertEvent x ht switcher
-            endDo
-        else Main.insertEvent x ht switcher
-    insertFromTable xs ht switcher
+            insertFromTable xs ht switcher
+            removeExpiredEvents
+        else
+            if not isValid
+                then do
+                    cat <- createCategory nCategory ht switcher
+                    Main.insertEvent x ht switcher
+                    insertFromTable xs ht switcher
+                else do
+                    Main.insertEvent x ht switcher
+                    insertFromTable xs ht switcher
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
