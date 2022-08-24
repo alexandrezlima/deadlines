@@ -83,15 +83,9 @@ removeExpiredEvents :: IO ()
 removeExpiredEvents = do
     events <- getEvents
     hoje <- getToday
-    let k = [x | x <- events, daysleft x hoje < 0] --Cria uma lista com todos os eventos com data negativa.
-    let k' = Prelude.map deleteExpired k
-    putStrLn $ show (Prelude.length k)
-    endDo
-
-deleteExpired :: Event -> IO ()
-deleteExpired e = do
-    let nome = unpack (name e)
-    _ <- deleteEventFromFile nome
+    let k = [x | x <- events, daysleft x hoje >= 0] --Cria uma lista com todos os eventos com data negativa.
+    print k
+    encodeToFile eventPath k
     endDo
 
 savePrefSort :: Int -> IO ()
@@ -201,6 +195,7 @@ main = do
 
     -- Posteriormente ler a tabela de categorias antes de criar os eventos.
     -- Criar função para refresh da data table.
+    removeExpiredEvents
     loadTable <- getProcessedList
     insertFromTable loadTable categoriesMap switcher
     setSortLabel builderMain
@@ -346,9 +341,22 @@ main = do
     --Mostra todos os widgets presentes em window.
     widgetShowAll window
     on window deleteEvent $ liftIO mainQuit >> return False
-
+    _ <- uiGradientTest
     mainGUI
 
+uiGradientTest :: IO ()
+uiGradientTest = do
+    builder <- makeBuilder "./ui/UI_GradientTester.glade"
+    spin <- getSpin builder "spinbutton1"
+    window <- builderGetObject builder castToWindow "window1"
+
+    background <- builderGetObject builder castToEventBox "eventbox1"
+
+    onValueSpinned spin $ do spinvalue <-spinButtonGetValue spin
+                             let v = fromInteger $ truncate spinvalue
+                             widgetModifyBg background StateNormal (gradient v)
+    widgetShow window
+    endDo
 
 endDo :: IO ()
 endDo = do putStr ""
@@ -442,22 +450,36 @@ clearSwitcher (x:xs) = do
 createCategory :: String -> HashTable String Builder -> Notebook-> IO Builder
 createCategory s ht parent = do
     categoryBuilder <- makeBuilder "./ui/UI_Categoria.glade"
-    fixedBox <- getFixed categoryBuilder "mainFixed"
-    lblCategory <- getLabel categoryBuilder "lblCategoryTitle"
-    colorButton <- builderGetObject categoryBuilder castToColorButton "btnColor"
-    background <- builderGetObject categoryBuilder castToEventBox "eventbox1"
-    background' <- builderGetObject categoryBuilder castToViewport "viewport1"
+    fixedBox        <- getFixed categoryBuilder "mainFixed"
+    lblCategory     <- getLabel categoryBuilder "lblCategoryTitle"
+    colorButton     <- builderGetObject categoryBuilder castToColorButton "btnColor"
+    background      <- builderGetObject categoryBuilder castToEventBox "eventbox1"
+    background'     <- builderGetObject categoryBuilder castToViewport "viewport1"
     labelSetText lblCategory s
     H.insert ht s categoryBuilder
     notebookAppendPage parent fixedBox s
 
 
     onColorSet colorButton $ do color <- colorButtonGetColor colorButton
+                                convertedColor <- colorToString color
                                 widgetModifyBg background StateNormal color
                                 widgetModifyBg background' StateNormal color
-                                putStrLn $ "Cor da categoria alterada com sucesso. " ++ show color
+                                deleteCategoryFromFile s
+                                insertCategory $ mkCategory (pack s) (pack convertedColor)
+                                endDo
 
     return categoryBuilder
+
+--Converte os campos da color para uma tripla com os respectivos valores da cor.
+colorToString :: Color -> IO String
+colorToString (Color a b c) = do
+    return $ show a ++ " " ++ show b ++ " " ++ show c
+
+--Converte uma tripla de strings para uma estrutura de cor.
+stringToColor :: String -> IO Color
+stringToColor s = do 
+    let [a, b, c] = Data.String.words s
+    return $ Color (read a) (read b) (read c)
 
 --Retorna o builder de uma categoria. Assim, pode-se ter acesso a todos os seus elementos.
 getCategory :: String -> HashTable String Builder -> IO Builder
@@ -630,6 +652,13 @@ insertEvent event ht switcher = do
     --Cria uma nova linha de evento para visualização do usuário.
     bLinhaEvento <- makeBuilder "./ui/UI_Evento.glade"
     newEvento    <- getFixed bLinhaEvento "fixedMain"
+
+    frame <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
+    frame' <- builderGetObject bLinhaEvento castToViewport "viewport1"
+
+    widgetModifyBg frame StateNormal (Color 65535 0 0)
+    let v = 100 :: Int
+    widgetModifyBg frame' StateNormal (Color (65535 - read (show v) *100) 0 0)
 
     --Ajuste das labels: preenche nome do evento, descrição, dia da semana, data e tempo restante.
     setLabelText bLinhaEvento "lblEvent" (nName ++ (if nRecurrent then " (recorrente: a cada " ++ show nRegularity  ++ " dias)" else ""))
