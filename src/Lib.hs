@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- TODO: Levar categorias em consideração para Ordenar; Cores na GUI; AutoDelete; Prefs de campos pra visualizar
+-- TODO: Cores na GUI; AutoDelete; Prefs de campos pra visualizar
 
 {-
 ADTS:
@@ -62,10 +62,10 @@ import qualified Data.ByteString.Lazy as BL
 
 import Data.Csv as Cassava
 
-import Data.Text (Text, isInfixOf, pack)
+import Data.Text (Text, isInfixOf, pack, drop, take)
 import qualified Data.Text.Encoding as Text
 
---import Graphics.UI.Gtk ( Color(..) )
+import Graphics.UI.Gtk ( Color(..) )
 import Data.List (sortOn, groupBy)
 
 --Importado para ser usado no Cassanva.decodeByName
@@ -178,6 +178,12 @@ instance FromField ColorSrc where
   parseField "Gradient" = pure Gradient
   parseField othertype  = Custom <$> parseField othertype
 
+--instance FromField Color where
+--  parseField hexcode = pure (Color (substring 0 1 hexcode) (substring 0 1 hexcode) (substring 0 1 hexcode))
+
+substring :: Int -> Int -> Text -> Text
+substring start len = Data.Text.take len . Data.Text.drop start
+
 instance ToNamedRecord Prefs where
   toNamedRecord Prefs{..} =
     Cassava.namedRecord
@@ -223,6 +229,8 @@ instance ToField ColorSrc where
   toField Gradient      = "Gradient"
   toField CatName       = "Category"
   toField (Custom text) = toField text
+
+--instance ToField Color where
 
 instance DefaultOrdered Prefs where
   headerOrder _ =
@@ -311,21 +319,21 @@ catchShowIO action =
     handleIOException :: IOException -> IO (Either String a)
     handleIOException = return . Left . show
 
--- Executa a leitura das prefs no csv. Caso o arquivo de prefs não exista, valores Padronizados de Preferencia são retornados
--- Apos isso, converte para o ADT de Prefs e o retorna
+-- Executa a leitura das prefs no csv. Caso o arquivo de prefs não exista, valores Padronizados de Preferencia são retornados,
+-- que estão indicado na função fromRight. Apos isso, converte para o ADT de Prefs e o retorna
 getPrefs :: IO Prefs
 getPrefs = do
-  prefvec <- fmap (Foldable.toList . fromRight Vector.empty) decodePrefsFromFile
   (ty, tm, td) <- getToday
-  if null prefvec then
-    return (Prefs True 5 6 "" (fromInteger ty) tm td)
-  else
-    return $ head prefvec
+  prefvec <- fmap (Foldable.toList . fromRight (Vector.singleton (Prefs False 5 6 "" (fromInteger ty) tm td))) decodePrefsFromFile
+  return $ head prefvec
 
+-- Função que, apos executar a leitra dos registros, transforma o Vector que é retornado em uma lista com as categorias criadas
+-- Se o arquivo não for encontrado, é retornada uma lista vazia
 getCategories :: IO [Category]
 getCategories = do fmap (Foldable.toList . fromRight Vector.empty) decodeCategoriesFromFile
 
 -- Função que, apos executar a leitra dos registros, transforma o Vector que é retornado em uma lista
+-- Se o arquivo não for encontrado, é retornada uma lista vazia
 -- Foldable.toList transforma o Vector em []
 getEvents :: IO [Event]
 getEvents = do fmap (Foldable.toList . fromRight Vector.empty) decodeEventsFromFile
@@ -467,23 +475,34 @@ dateToWeekDay d m y = string
 sortEventsBy :: String -> [Event] -> [Event]
 sortEventsBy method es
  | method == "name"        = sortOn name es
+ | method == "category"    = sortByCategory es
  | method == "date"        = sortByDate es
  | method == "recurrent"   = filterIsReg es   ++ [e | e <- es, not $ recurrent e]
  | method == "description" = filterHasDesc es ++ [e | e <- es, description e == ""]
  | otherwise               = es
 
--- Reordena a lista de eventos de acordo com o mais antigo para o mais recente
+-- Reordena a lista de eventos de acordo com o mais antigo para o mais recente.
+-- Primeiro os eventos devem ser ordenados pelo ano. Depois agrupados em listas para cada ano que houver.
+-- Então podem ser organizados por mes, e o process oé repetido para os dias.
 sortByDate :: [Event] -> [Event]
 sortByDate es = concat $ concat dsorted
   where
     ysorted     = sortOn year es
     yearGroups  = groupBy yearEq ysorted
-    msorted     = sortByMonth yearGroups
+    msorted     = listsSort month yearGroups
     monthGroups = map (groupBy monthEq) msorted
     dsorted     = sortByDay monthGroups
 
+-- Reordena a lista para junter os eventos com as mesmas categorias.
+-- Secundariamente os eventos de uma mesma categoria são organizados alfabeticamente.
+sortByCategory :: [Event] -> [Event]
+sortByCategory es = concat nsorted
+  where
+    csorted = sortOn category es
+    catGroups = groupBy catEq csorted
+    nsorted = listsSort category catGroups
 
--- TODO: REMOVER
+-- FUNÇÃO NÃO FUNCIONOU MUITO BEM. Tive que recorrer para groupBy
 -- Função auxiliar. Agrupa uma lista de eventos em várias listas de de eventos de acordo com algum dos campos do Evento.
 -- Por exemplo, se quiser agrupar de tal forma que cada sublista tenha os anos iguais: listsOfDates year es
 -- Para meses iguais: listsOfDates month es
@@ -493,7 +512,7 @@ listsOfDates _ []  = []
 listsOfDates _ [e] = [[e]]
 listsOfDates getter (e:es)
  | getter e == getter (head es) = (e : [head es]) : listsOfDates getter (tail es)
- | otherwise                = [e] : listsOfDates getter es
+ | otherwise                    = [e] : listsOfDates getter es
 
 yearEq :: Event -> Event -> Bool
 yearEq e1 e2 = year e1 == year e2
@@ -501,18 +520,21 @@ yearEq e1 e2 = year e1 == year e2
 monthEq :: Event -> Event -> Bool
 monthEq e1 e2 = month e1 == month e2
 
--- Função auxiliar. Recebe varias listas de eventos, que estão separadas por anos, isto é [[2020], [2021], [2004]]
--- Organiza cada uma dessas listas por mes
-sortByMonth :: [[Event]] -> [[Event]]
-sortByMonth = map (sortOn month)
+catEq :: Event -> Event -> Bool
+catEq e1 e2 = category e1 == category e2
 
--- Função auxiliar. Funciona que nem a ordenação por mes, mas agora as listas estão ordenadas por mes
+-- Função auxiliar. Recebe varias listas de algum ADT e organiza cada uma delas de acordo com o campo informado
+listsSort :: Ord field => (adt -> field) -> [[adt]] -> [[adt]]
+listsSort getter = map (sortOn getter)
+
+-- Função auxiliar. Ordena cada lista individualmente por dia.
 sortByDay :: [[[Event]]] -> [[[Event]]]
 sortByDay = map (map (sortOn day))
 
 testrecord :: ByteString
 testrecord = "name,day,month,year,description,category,recurrent,color\namanha,01,01,2022,insert description,none,False,Gradient\n"
 
+{-
 eventrecord :: Event
 eventrecord =
   Item { name     = "depoisDeAmanha"
@@ -523,7 +545,7 @@ eventrecord =
     , category    = "none"
     , recurrent   = True
     , regularity  = 7
-    , color       = Custom "#EEEEEE"
+    , color       = "#EEEEEE"
   }
 
 eventrecord2 :: Event
@@ -536,7 +558,7 @@ eventrecord2 =
     , category    = "none"
     , recurrent   = True
     , regularity  = 7
-    , color       = Custom "#EEEEEE"
+    , color       = "#EEEEEE"
   }
 
 eventrecord3 :: Event
@@ -549,7 +571,7 @@ eventrecord3 =
     , category    = "none"
     , recurrent   = False
     , regularity  = 7
-    , color       = Custom "#EEEEEE"
+    , color       = "#EEEEEE"
   }
 
 eventrecord4 :: Event
@@ -562,9 +584,9 @@ eventrecord4 =
     , category    = "none"
     , recurrent   = False
     , regularity  = 7
-    , color       = Custom "#EEEEEE"
+    , color       = "#EEEEEE"
   }
-
+-}
 main :: IO ()
 main = do
   --Tutorial de 2 segundos na pag inicial da biblioteca
@@ -575,6 +597,6 @@ main = do
       putStrLn $ "Linha do meu csv: " ++ col1 ++ " " ++ col2 ++ " " ++ col3-}
   let prefes = mkPrefs True 0 0 "a" 0 0 0
 
-  _ <- getPrefs
+  a <- getPrefs
 
-  print prefes
+  print a
