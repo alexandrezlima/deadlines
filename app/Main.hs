@@ -7,107 +7,87 @@ module Main where
 import Lib
 import Data.IORef
 import Control.Monad
-
 import Graphics.UI.Gtk
 import Graphics.UI.Gtk.Builder
 import Data.String
 import Control.Monad.IO.Class (MonadIO(liftIO))
---import Data.Text.Read
---import Text.Printf (printf)
-
 import qualified Data.HashTable.IO as H
 import Data.Maybe
 import Data.Text
 
---Hashtable simples
+--Estrutura de uma hashtable simples.
 type HashTable a b = H.BasicHashTable a b
 
+--Cria uma hashtable cuja key é uma string e o valor é um Builder.
+--Durante este programa, este builder corresponde aos widgets de categorias.
 makeHashTable :: IO (HashTable String Builder)
 makeHashTable = do H.new
 
-{--
-
-EXEMPLO DE PRINT
-
-printHash :: HashTable String String -> String -> IO ()
-printHash ht s = do
-    x <- H.lookup ht s
-    H.insert ht "Nani" "x"
-    putStrLn $ if x == Nothing then "Nothing" else "teste"
---}
-
 main :: IO ()
 main = do
+    --Inicializa a interface gráfica.
     initGUI
 
 
-    --Builder para janela principal.
+    --Cria um builder para janela principal.
     builderMain <- makeBuilder "./ui/UI_main.glade"
 
-    --Janela principal, que comportará todos os outros elementos.
+    --Referência da janela principal, que comportará todos os outros elementos.
     window <- builderGetObject builderMain castToWindow "mainWindow"
 
-    --Switcher comporta todas as categorias que, por sua vez, contém os respectivos eventos.
+    --Referência do switcher, que comporta todas as categorias e que, por sua vez, contém os respectivos eventos.
     switcher <- builderGetObject builderMain castToNotebook "switcherMain"
+
+    --Logo do canto inferior direito.
     logo <- builderGetObject builderMain castToImage "imgLogo"
     imageSetFromFile logo "./images/deadlines-RB.png"
 
-    -- #IDEIA: ao ler o arquivo de categorias, chamar aqui a função create category para cada linha da tabela.
-    --                  n <- createCategory "Nome da Categoria" categoriesMap switcher
-    --                  talvez adicionar o parâmetro de cor? Depende de como podemos controlá-lo.
-    -- Após adicionar todas as categorias, pegar o arquivo que lê todos os eventos, 
-    -- ir de categoria em categoria adicionando-os às suas correspondentes categorias, usando insertEvent.
-
-    --A hashtable pode ser passada como uma espécie de ponteiro. "Modificar" em outras funções altera esta própria variável.
+    --Cria a hashtable.
     categoriesMap <- makeHashTable
 
-    -- Posteriormente ler a tabela de categorias antes de criar os eventos.
-    -- Criar função para refresh da data table.
+    --Remove os eventos expirados (caso o usuário tenha habilitado a opção "autodelete").
     removeExpiredEvents
+
+    --Pega a tabela processada, isto é, caso já tenha filtro e ordenação previamente selecionados.
     loadTable <- getProcessedList
+
+    --Tendo a lista de eventos, insere cada evento em sua respectiva categoria.
     insertFromTable loadTable categoriesMap switcher
+
+    --Atualiza os labels de ordenação, filtro e autodelete no canto inferior esquerdo.
     setSortLabel builderMain
     setFilterLabel builderMain
     setAutodeleteLabel builderMain
 
-    --Ideia para salvar e posteriormente carregar as configurações do usuário:
-    --      Ter funções de sort por propriedade. Isto é, ter uma função que
-    --      recebe uma lista, uma string que corresponde ao nome da coluna (ex: nome, data, etc)
-    --      retorna a mesma lista só que organizada de acordo com a propriedade fornecida.
-    --Na hora de popular a tabela, resta apenas passar o vetor organizado como parâmetro.
-
-
-    --Para criar e adicionar uma nova categoria, basta chamar a função createCategory.
-    --Tal função espera como parâmetro o nome da categoria, a hashtable e o parent.
-    --Exemplo para criar a categoria:
-    --n <- createCategory "Minha categoria 1" categoriesMap switcher
-
-   -- window' <- createCompromisso "compromisso a" "data a" "tempo restante a" "dia da semana a" "descrição a"
-   -- window'' <- createCompromisso "compromisso b" "data b" "tempo restante b" "dia da semana b" "descrição b"
-    --hbox <- builderGetObject builder castToVScrollbar "vscrollbar"
 
     -- ADD EVENT ###################################################################################
+    -- O botão "Adicionar evento" cria um novo widget, neste caso uma nova janela, em que o usuário
+    -- pode adicionar os detalhes de seu compromisso.
     novo <- getAction builderMain "action_novoEvento"
     onActionActivate novo $ do bdAdd <- makeBuilder "./ui/UI_novoEvento.glade"
                                newEvent <- createEvent bdAdd
                                -- CONFIRM  ##################################################################
-                               -- Adiciona o novo evento a uma categoria já existente.
-                               -- Caso a categoria não exista, ela é criada e este novo evento é inserido.
+                               -- Caso o usuário clique em "Adicionar", algumas verificações são realizadas.
                                confirm     <- getButton bdAdd "btnConfirmar"
                                bRecurrent  <- builderGetObject bdAdd castToToggleButton "recurrentCheckbox"
                                bRegularity <- builderGetObject bdAdd castToHPaned "regularityPanel"
                                onClicked confirm $ do notValid <- checkFields bdAdd
-                                                      if notValid
+                                                      if notValid --Verifica-se se os campos necessários foram preenchidos.
+                                                        --Caso "Evento" e "Categoria" estejam vazios, um warning é exibido.
                                                         then generateWarningMessage "Preencha os campos 'Evento' e 'Categoria' ."
                                                         else do
                                                             existsEv <- eventExists bdAdd
-                                                            if not existsEv
+                                                            if not existsEv --Caso ambos os campos anteriormente mencionados tenham sido preenchidos.
+                                                                --Verifica-se se o evento já existe. Em caso negativo, o evento é criado e adicionado.
                                                                 then do
                                                                     addEvent builderMain bdAdd switcher categoriesMap
                                                                     updatedList <- getProcessedList
                                                                     refreshEvents updatedList categoriesMap switcher
-                                                                    widgetDestroy newEvent
-                                                                else generateWarningMessage $ "Evento já existente."
+                                                                    widgetDestroy newEvent --Remove a janela de criação de evento.
+                                                                --Caso contrário, um warning é apresentado indicando que o evento já existe.
+                                                                else generateWarningMessage "Evento já existente."
+                               --Dentro da janela de criação de evento, o toggle "regularidade" exibe um spin box onde o usuário
+                               --pode escolher a regularidade do evento que está criando.
                                onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity
                                                          if isVisible then widgetHide bRegularity  else widgetShow bRegularity
                                                          endDo
@@ -116,7 +96,11 @@ main = do
     -- ###############################################################################################
 
     -- ORDENAÇÃO #####################################################################################
-
+    {-
+    Cada um dos eventos de ordenação pega uma lista com os eventos com filtro aplicado (caso tenha filtro
+    aplicado) e, sobre essa lista, aplica uma função de ordenação. Em seguida, salva no CSV a preferência
+    de ordenação e atualiza o label correspondente no canto inferior esquerdo.
+    -}
     -- Ordenar por nome
     action_sort_name <- getAction builderMain "ordenar_Nome"
     onActionActivate action_sort_name $ do updatedList <- getCurrentFilteredList
@@ -137,6 +121,7 @@ main = do
                                            refreshEvents (sortEventsBy "description" updatedList) categoriesMap switcher
                                            savePrefSort 3
                                            setSortLabel builderMain
+    
     -- Ordenar por recorrência
     action_sort_rec <- getAction builderMain "ordenar_Recorrencia"
     onActionActivate action_sort_rec $ do updatedList <- getCurrentFilteredList
@@ -144,7 +129,7 @@ main = do
                                           savePrefSort 4
                                           setSortLabel builderMain
 
-    -- Volta a lista para a ordenação padrão (ordem de inserção do usuário)
+    -- Volta a lista para a ordenação padrão (ordem de inserção do usuário).
     action_sort_default <- getAction builderMain "ordenar_None"
     onActionActivate action_sort_default $ do updatedList <- getCurrentFilteredList
                                               refreshEvents updatedList categoriesMap switcher
@@ -152,7 +137,11 @@ main = do
                                               setSortLabel builderMain
 
     -- FILTROS ######################################################################################
-
+    {-
+    Cada um dos eventos de filtragem pega uma lista de todos os eventos, aplica a função de filtragem e,
+    depois, a de ordenação (caso haja alguma ordenação selecionada). Salva a preferência de filtragem no
+    CSV e atualiza o label correspondente no canto inferior esquerdo.
+    -}
     -- Filtrar por categoria
     action_filter_category <- getAction builderMain "Action_Filtro_Categoria"
     onActionActivate action_filter_category $ do createFilterDialogText 1 categoriesMap switcher builderMain
@@ -193,10 +182,12 @@ main = do
     -- ##############################################################################################
 
     -- OUTROS BOTÕES DO MENU SUPERIOR ###############################################################
+    -- Botão "Quit" no menu superior. Fecha o programa.
     action_sair <- getAction builderMain "action_Sair"
     onActionActivate action_sair $ do liftIO mainQuit >> return False
                                       endDo
-
+    
+    --Botão "autodelete". Faz com que o autodelete seja ativado ou desativado (exclui eventos cuja data está expirada).
     action_autodelete <- getAction builderMain "action_Autodelete"
     onActionActivate action_autodelete $ do autodel <- getAutodelete
                                             print autodel
@@ -207,31 +198,17 @@ main = do
                                             endDo
     -- ##############################################################################################
 
-    --Mostra todos os widgets presentes em window.
+    --Mostra todos os widgets presentes em "window".
     widgetShowAll window
     on window deleteEvent $ liftIO mainQuit >> return False
-    --_ <- uiGradientTest
     mainGUI
 
-uiGradientTest :: IO ()
-uiGradientTest = do
-    builder <- makeBuilder "./ui/UI_GradientTester.glade"
-    spin <- getSpin builder "spinbutton1"
-    window <- builderGetObject builder castToWindow "window1"
-
-    background <- builderGetObject builder castToEventBox "eventbox1"
-
-    onValueSpinned spin $ do spinvalue <-spinButtonGetValue spin
-                             let v = fromInteger $ truncate spinvalue
-                             widgetModifyBg background StateNormal (gradient v 2)
-    widgetShow window
-    endDo
-
+--Função para facilitar o IO () dos "do" blocks que precisam retornar IO ().
 endDo :: IO ()
 endDo = do putStr ""
 
 
---Devolve um monad de lista de Events do atual filtro salvo.
+--Devolve um monad de lista de Events com o atual filtro aplicado. Lê qual é o filtro salvo no CSV "Prefs".
 getCurrentFilteredList :: IO [Event]
 getCurrentFilteredList = do
     prefs  <- getPrefs
@@ -240,6 +217,7 @@ getCurrentFilteredList = do
     print events
     filteredList events prefs
 
+--Função auxiliar que devolve uma lista filtrada dada uma preferência. Aplica diretamente a função de filtragem.
 filteredList :: [Event] -> Prefs -> IO [Event]
 filteredList events prefs = do
     let f      = defaultFilter      prefs
@@ -256,6 +234,10 @@ filteredList events prefs = do
         6 -> getEvents
         _ -> getEvents
 
+--Salva no CSV "Prefs" qual é o filtro atualmente selecionado.
+-- Int, String, Int, Int, Int são, respectivamente:
+-- Número do filtro selecionado, qual o nome utilizado para filtrar (nome do evento ou descrição),
+-- Dia, mês e ano.
 savePrefFilter :: Int -> String -> Int -> Int -> Int -> IO ()
 savePrefFilter n s d m y = do
     prefs <- getPrefs
@@ -265,28 +247,8 @@ savePrefFilter n s d m y = do
     savePrefs (Prefs p_ad p_ds n s d m y)
     endDo
 
-saveAutodelete :: Bool -> IO ()
-saveAutodelete b = do
-    prefs <- getPrefs
-    let p_df = defaultFilter prefs
-    let p_ds = defaultSort prefs
-    let p_fn = defaultFilterName prefs
-    let p_fd = defaultFilterDay prefs
-    let p_fm = defaultFilterMonth prefs
-    let p_fy = defaultFilterYear prefs
-    print prefs
-    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
-    if b then removeExpiredEvents else endDo
-
-removeExpiredEvents :: IO ()
-removeExpiredEvents = do
-    events <- getEvents
-    hoje <- getToday
-    let k = [x | x <- events, daysleft x hoje >= 0] --Cria uma lista com todos os eventos com data negativa.
-    print k
-    encodeToFile eventPath k
-    endDo
-
+--Salva no CSV "Prefs" qual é a ordenação atualmente selecionada.
+-- "n" indica o número da respectiva ordenação.
 savePrefSort :: Int -> IO ()
 savePrefSort n = do
     prefs <- getPrefs
@@ -300,10 +262,37 @@ savePrefSort n = do
     savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
     endDo
 
+--Salva no CSV "Prefs" a opção "Autodelete", podendo ela ser true ou false (parâmetro "b").
+saveAutodelete :: Bool -> IO ()
+saveAutodelete b = do
+    prefs <- getPrefs
+    let p_df = defaultFilter prefs
+    let p_ds = defaultSort prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    print prefs
+    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
+    if b then removeExpiredEvents else endDo
+
+--Pega a lista de eventos cuja data limite não foi expirada e sobrescreve no CSV de eventos.
+removeExpiredEvents :: IO ()
+removeExpiredEvents = do
+    events <- getEvents
+    hoje <- getToday
+    let k = [x | x <- events, daysleft x hoje >= 0] --Cria uma lista com todos os eventos com data negativa.
+    print k
+    encodeToFile eventPath k
+    endDo
+
+--Lê do CSV qual é a preferência de autodelete e devolve o Bool correspondente.
 getAutodelete :: IO Bool
 getAutodelete = do
     autodelete <$> getPrefs
 
+--Dada uma lista de eventos, aplica a função de ordenação e devolve a lista organizada
+--de acordo com o tipo de ordenação salva no CSV "Prefs".
 getSortedList :: [Event] -> IO [Event]
 getSortedList es = do
     prefs <- getPrefs
@@ -317,12 +306,13 @@ getSortedList es = do
         5 -> return es
         _ -> return es
 
+--Retorna um monad de uma lista de eventos com filtro e ordenação aplicados.
 getProcessedList :: IO [Event]
 getProcessedList = do
     l <- getCurrentFilteredList
     getSortedList l
 
-
+--Modifica a label de autodelete no canto inferior esquerdo.
 setAutodeleteLabel :: Builder -> IO()
 setAutodeleteLabel builder = do
     prefs <- getPrefs
@@ -331,6 +321,7 @@ setAutodeleteLabel builder = do
     setLabelText builder "lbl_AutoDelete" ("Autodeletar datas atingidas: " ++ show b)
     endDo
 
+--Modifica a label de ordenação no canto inferior esquerdo.
 setSortLabel :: Builder -> IO ()
 setSortLabel builder = do
     prefs <- getPrefs
@@ -339,17 +330,7 @@ setSortLabel builder = do
     setLabelText builder "lbl_Sort" ("Ordenação: " ++ getSortByInt n)
     endDo
 
-getSortByInt :: Int -> String
-getSortByInt n =
-    case n of
-        1 -> "por nome."
-        2 -> "por data."
-        3 -> "por descrição."
-        4 -> "por recorrência."
-        5 -> "default."
-        6 -> "por categoria."
-        _ -> ""
-
+--Modifica a label de filtragem no canto inferior esquerdo.
 setFilterLabel :: Builder -> IO ()
 setFilterLabel builder = do
     prefs <- getPrefs
@@ -362,6 +343,23 @@ setFilterLabel builder = do
     setLabelText builder "lbl_Filter" ("Filtro: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
     endDo
 
+--Retorna qual o tipo de ordenação baseado em um número.
+--Esta ordem foi definida de forma arbitrária.
+getSortByInt :: Int -> String
+getSortByInt n =
+    case n of
+        1 -> "por nome."
+        2 -> "por data."
+        3 -> "por descrição."
+        4 -> "por recorrência."
+        5 -> "default."
+        6 -> "por categoria."
+        _ -> ""
+
+--Retorna qual o tipo de filtragem baseado em um número.
+--Esta ordem foi definida de forma arbitrária.
+--n é o número do filtro, s corresponde ao nome do evento ou à descrição,
+--x o dia, y o mês e z, o ano.
 getFilterByInt :: Int -> String -> Int -> Int -> Int -> String
 getFilterByInt n s x y z=
     case n of
@@ -374,28 +372,32 @@ getFilterByInt n s x y z=
         7 -> "por eventos que possuem descrição."
         _ -> ""
 
---Int corresponde ao tipo de filtro. 1 filtra eventos mais próximos, 2 filtra eventos mais distantes.
+--Cria uma janela para escolher a data do filtro.
+--O Int corresponde ao tipo de filtro: 1 filtra eventos anteriores à data, 2 filtra eventos posteriores à data.
 createFilterDialogDate :: Int -> HashTable String Builder -> Notebook -> Builder -> IO ()
 createFilterDialogDate n ht switcher builderMain = do
     builder <- makeBuilder "./ui/UI_FilterDialogDate.glade"
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
     btnConfirmar <- getButton builder "btn_confirmar"
-
+    
+    --Cria as referências dos spins.
     dia' <- getSpin builder "spin_dia"
     mes' <- getSpin builder "spin_mes"
     ano' <- getSpin builder "spin_ano"
 
     prefs <-getPrefs
     print prefs
-
+    
+    --Define a label baseado no tipo de filtro.
     if n == 1
         then setLabelText builder "lblTitulo" "Filtrar eventos anteriores a: "
         else setLabelText builder "lblTitulo" "Filtrar eventos posteriores a:"
 
-    --Botão cancelar.
+    --Botão cancelar, fecha a janela.
     onClicked btnCancelar $ do widgetDestroy window
-
+    
+    --Aplica o filtro baseado na data escolhida.
     onClicked btnConfirmar $ do updatedTable <- getEvents
                                 vDia <- spinButtonGetValue dia'
                                 vMes <- spinButtonGetValue mes'
@@ -413,11 +415,11 @@ createFilterDialogDate n ht switcher builderMain = do
                                 setFilterLabel builderMain
                                 widgetDestroy window
 
-
+    --Mostra a janela.
     widgetShow window
     endDo
 
-
+--Cria uma janela para escolher o nome do evento ou da categoria.
 --Int corresponde ao tipo de filtro. 1 filtra categoria, 2 filtra nome.
 createFilterDialogText :: Int -> HashTable String Builder -> Notebook -> Builder -> IO ()
 createFilterDialogText n ht switcher builderMain = do
@@ -425,7 +427,8 @@ createFilterDialogText n ht switcher builderMain = do
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
     btnConfirmar <- getButton builder "btn_confirmar"
-
+    
+    --Atualiza o label com o tipo de filtro correspondente.
     if n == 1
         then setLabelText builder "lblTitulo" "Categoria:"
         else setLabelText builder "lblTitulo" "Eventos que contém o seguinte texto:"
@@ -433,9 +436,10 @@ createFilterDialogText n ht switcher builderMain = do
     prefs <- getPrefs
     print prefs
 
-    --Botão cancelar.
+    --Botão cancelar. Fecha a janela.
     onClicked btnCancelar $ do widgetDestroy window
-
+    
+    --Botão confirmar, pega o texto inserido no campo e aplica o filtro correspondente (por categoria ou por nome do evento).
     onClicked btnConfirmar $ do text <- getTextFromEntry builder "filterText"
                                 updatedTable <- getEvents
                                 if n == 1
@@ -448,26 +452,29 @@ createFilterDialogText n ht switcher builderMain = do
                                 setFilterLabel builderMain
                                 widgetDestroy window
 
-
+    --Mostra a janela.
     widgetShow window
     endDo
 
-
+--Dada uma lista de eventos, refaz a hashtable, recria as categorias e insere os eventos correspondentes.
 refreshEvents :: [Event] -> HashTable String Builder -> Notebook -> IO ()
 refreshEvents es ht switcher = do
+    --inserção de evento para salvar a aba.
     ht <- makeHashTable --Recria a hashtable
     children <- containerGetChildren switcher
     clearSwitcher children
     insertFromTable es ht switcher
+    --inserção de evento para abrir a aba.
     endDo
 
+--Dada uma lista de widgets, destrói cada um deles.
 clearSwitcher :: [Widget] -> IO ()
 clearSwitcher []     = do endDo
 clearSwitcher (x:xs) = do
     widgetDestroy x
     clearSwitcher xs
 
---Cria uma categoria com um dado nome s. Adiciona-a na HashTable. Adiciona-o ao parent.
+--Cria uma categoria com um dado nome s. Adiciona-a na HashTable. Adiciona-o ao parent. Retorna o builder da categoria criada.
 createCategory :: String -> HashTable String Builder -> Notebook-> IO Builder
 createCategory s ht parent = do
     categoryBuilder <- makeBuilder "./ui/UI_Categoria.glade"
@@ -479,7 +486,8 @@ createCategory s ht parent = do
     labelSetText lblCategory s
     H.insert ht s categoryBuilder
     notebookAppendPage parent fixedBox s
-
+    
+    --Verifica se uma dada categoria existe. Se sim, adiciona a cor salva.
     categoriesList <- getCategories
     if catExistsCSV s categoriesList
         then do color <- stringToColor (findCatColor categoriesList s)
@@ -491,7 +499,9 @@ createCategory s ht parent = do
             insertCategory (Category (pack s) (pack "0 0 0"))
             endDo
 
-
+    --Ao clicar no botão de cor e selecionar uma nova cor, troca a cor de fundo
+    --da categoria, bem como faz um refresh de modo que todos os eventos que possuem
+    --o tipo de coloração como "Categoria" possam receber a atualização de cor.
     onColorSet colorButton $ do color <- colorButtonGetColor colorButton
                                 deleteCategoryFromFile s
                                 colorName <- colorToString color
@@ -501,25 +511,25 @@ createCategory s ht parent = do
                                 loadTable <- getProcessedList
                                 refreshEvents loadTable ht parent
                                 endDo
-
     return categoryBuilder
 
+--Dada uma string indicando o nome de uma categoria, devolve se essa categoria existe ou não.
 catExistsCSV :: String -> [Category] -> Bool
 catExistsCSV _ []      = False
 catExistsCSV s (x: xs) = (catName x == pack s) || catExistsCSV s xs
 
---Converte os campos da color para uma tripla com os respectivos valores da cor.
+--Converte os campos de Color para um monad de string separada por espaços.
 colorToString :: Color -> IO String
 colorToString (Color a b c) = do
     return $ show a ++ " " ++ show b ++ " " ++ show c
 
---Converte uma tripla de strings para uma estrutura de cor.
+--Converte uma string do tipo "a b c", sendo a, b e c inteiros em um monad de Color.
 stringToColor :: String -> IO Color
 stringToColor s = do
     let [a, b, c] = Data.String.words s
     return $ Color (read a) (read b) (read c)
 
---Retorna o builder de uma categoria. Assim, pode-se ter acesso a todos os seus elementos.
+--Retorna o monad de builder de uma categoria. Assim, pode-se ter acesso a todos os seus elementos.
 getCategory :: String -> HashTable String Builder -> IO Builder
 getCategory s ht = do
     value <- H.lookup ht s
@@ -527,7 +537,7 @@ getCategory s ht = do
         Just x -> return x
         Nothing -> error "Referência de categoria não encontrada."
 
---Verifica se uma dada categoria existe.
+--Verifica se uma dada categoria existe na hashtable.
 categoryExists :: String -> HashTable String Builder -> IO Bool
 categoryExists s ht = do
     value <- H.lookup ht s
@@ -545,8 +555,7 @@ generateWarningMessage s = do
     widgetShowAll warningWindow
     putStrLn "Warning: há algum campo vazio."
 
-
---Verifica se todos os campos são válidos, isto é, se existem campos vazios.
+--Verifica se o nome do evento e a categoria são válidos, isto é, se esses campos são vazios.
 --Retorna true se algum campo for vazio.
 checkFields :: Builder -> IO Bool
 checkFields bEvent = do
@@ -557,12 +566,14 @@ checkFields bEvent = do
     category       <- entryGetText categoryBox
     return $ name == "" || category == ""
 
+--Verifica se um dado evento existe na lista de eventos lida do CSV de eventos.
 eventExists :: Builder -> IO Bool
 eventExists bdAdd = do
     nameBox <- getTextBox bdAdd "txtBoxEvent"
     nome    <- entryGetText nameBox
     checkEvent nome <$> getEvents
 
+--Função auxiliar. Dado o nome de um evento, verifica se esse evento está na lista de eventos.
 checkEvent :: String -> [Event] -> Bool
 checkEvent s []     = False
 checkEvent s (x:xs) = b || checkEvent s xs
@@ -570,30 +581,34 @@ checkEvent s (x:xs) = b || checkEvent s xs
         b = s == unpack (name x)
 
 --Esta função deve receber:
---  O builder do createEvent, que é de onde serão capturados os textos inseridos pelo usuário nas text box.
+--  O builder do createEvent, que é de onde serão capturados os textos inseridos pelo usuário nas entry boxes.
 --  O builder da main page. Caso a categoria não exista, ela precisará ser criada.
+--  O Notebook (switcher), o qual será parent do widget da categoria.
 --  A hashTable para que seja possível pegar a referência da categoria, caso exista. 
 addEvent :: Builder -> Builder -> Notebook -> HashTable String Builder -> IO ()
 addEvent bMain bEvento switcher ht = do
     categoria    <- getTextFromEntry bEvento "txtBoxCategory"
     eventForm    <- toEventForm bEvento
-    --Adicionar aqui função para salvar eventForm no csv.
+
+    --Salva o evento no CSV de eventos.
     Lib.insertEvent eventForm
     isValid      <- categoryExists categoria ht
+
+    --Verifica se a categoria existe.
     if not isValid
         then do
-            --Caso não exista a categoria, criamos uma nova categoria.
+            --Caso não exista a categoria, cria-se uma nova categoria e esta é inserida no switcher.
             bCategoria <- createCategory categoria ht switcher
             Main.insertEvent eventForm ht switcher
             putStrLn "Categoria criada."
-            --Adicionamos dentro desta categoria o novo evento.
             endDo
         else do
             --A categoria já existe. Basta que se pegue a referência e adicionemos o evento à vertical box.
             Main.insertEvent eventForm ht switcher
             putStrLn ""
 
---Pega um builder e retorna os campos na forma de evento.
+--Pega um builder e retorna os campos na forma de evento. Esse builder corresponde a um widget com campos
+--pré-determinados.
 toEventForm :: Builder -> IO Event
 toEventForm builder = do
     eName        <- getTextFromEntry builder "txtBoxEvent"
@@ -608,33 +623,34 @@ toEventForm builder = do
     colorUrg     <- getSpin builder "spin_urg"
     vColorUrg    <- spinButtonGetValue colorUrg
     btnColor     <- builderGetObject builder castToColorButton "colorbutton1"
-    vBtnColor    <- colorButtonGetColor btnColor
 
+    --Colors
+    vBtnColor    <- colorButtonGetColor btnColor
     let urg      = fromInteger $ truncate vColorUrg
     let valueRec = fromInteger $ truncate vRegularity
     color'       <- colorToString vBtnColor
     let color    = switchOnColor vColorType color' urg
     print vColorType
 
-    -- Calendar settings.
+    --Calendar settings.
     eCalendar    <- builderGetObject builder castToCalendar "calendar"
     cFormat      <- calendarGetDate eCalendar
     eDay         <- getDate cFormat 0
     eMonth       <- getDate cFormat 1
     eYear        <- getDate cFormat 2
 
-
-    --Adicionar aqui as outras variáveis.
     --Month tem um retorno de 0 a 11. Logo foi ajustado para 1 a 12.
     return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) isRecurrent valueRec color
 
+--Dado um inteiro n, retorna o tipo de cor correspondente.
+--A string s corresponde à string convertida de Color.
+--O inteiro k corresponde à urgência do gradiente.
 switchOnColor :: Int -> String -> Int -> ColorSrc
 switchOnColor n s k = case n of
     0 -> Gradient k
     1 -> CatName
     2 -> Custom (pack s)
     _ -> Gradient k
-
 
 --Retorna o dia, mês ou ano dependendo do parâmetro passado. 0 => dia, 1 => mês, 2 => ano.
 getDate :: (Int, Int, Int) -> Int -> IO Int
@@ -643,20 +659,25 @@ getDate (_, m, _) 1 = return m
 getDate (y, _, _) 2 = return y
 getDate (_, _, _) _ = return $ -1 --Esta ação nunca ocorrerá.
 
+--Retorna o ano de uma data.
 getYear :: (Integer, Int, Int) -> Int
 getYear (a, _, _) = fromInteger a
 
+--retorna o mês de uma data.
 getMonth :: (Integer, Int, Int) -> Int
 getMonth (_, a, _) = a
 
+--Retorna o dia de uma data.
 getDay :: (Integer, Int, Int) -> Int
 getDay (_, _, a) = a
 
+--Retorna o texto que está dentro de uma entry box (digitado pelo usuário).
 getTextFromEntry :: Builder -> String -> IO String
 getTextFromEntry builder s = do
     entryRef <- getTextBox builder s
     entryGetText entryRef
 
+--Retorna qual é o nome do mês dado um inteiro que equivale ao mês.
 getMonthName :: Int -> String
 getMonthName x = case x of
     1  -> "Janeiro"
@@ -673,13 +694,17 @@ getMonthName x = case x of
     12 -> "Dezembro"
     _  -> ""
 
+--Dada uma lista de eventos, uma hastable e um Notebook (switcher), insere os eventos
+--em duas correspondentes categorias.
 insertFromTable :: [Event] -> HashTable String Builder -> Notebook -> IO ()
-insertFromTable [] _ _            = endDo
+insertFromTable [] _ _             = endDo
 insertFromTable (x:xs) ht switcher = do
     let nCategory = unpack $ category x
     isValid <- categoryExists nCategory ht
     autodel <- getAutodelete
     hoje <- getToday
+
+    --Caso o autodelete esteja ativado e o total de dias restantes do evento seja negativo, este é excluído do CSV.
     if autodel && (daysleft x hoje) < 0
         then do
             insertFromTable xs ht switcher
@@ -694,13 +719,11 @@ insertFromTable (x:xs) ht switcher = do
                     Main.insertEvent x ht switcher
                     insertFromTable xs ht switcher
 
-
+--Dada uma cor e a lista de categorias, retorna a cor correspondente.
 getBackgroundColor :: Int -> ColorSrc -> String -> [Category] -> IO Color
 getBackgroundColor _ CatName s cs       = stringToColor (findCatColor cs s)
 getBackgroundColor x (Gradient k)   _ _ = return $ gradient x k
 getBackgroundColor _ (Custom s) _ _     = stringToColor (unpack s)
-
-
 
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
@@ -739,12 +762,14 @@ insertEvent event ht switcher = do
     newColor <- getBackgroundColor (daysleft event hoje) nColor nCategory categoryList
     bg1 <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
     bg2 <- builderGetObject bLinhaEvento castToViewport "viewport1"
-
     widgetModifyBg bg1 StateNormal newColor
     widgetModifyBg bg2 StateNormal newColor
 
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
+    --O botão de editar cria um novo widget em uma nova janela, semelhante ao widget "Adicionar evento",
+    --mas neste caso todos os seus campos são automaticamente preenchidos com a informação do evento.
+    --Neste widget o usuário pode editar as informações do evento correspondente.
     onClicked btnEditar $ do bEdit <- makeBuilder "./ui/UI_editarEvento.glade"
                              bEditWindow <- builderGetObject bEdit castToDialog "editEventWindow"
                              setTextBoxText bEdit "txtBoxEvent" nName
@@ -783,7 +808,7 @@ insertEvent event ht switcher = do
                                                     if Prelude.length b == 0
                                                         then do page <- getFixed categoriaBuilderRef "mainFixed"
                                                                 widgetDestroy page
-                                                                --Adicionar aqui o evento para remover a CATEGORIA do csv.
+                                                                deleteCategoryFromFile nCategory
                                                                 endDo
                                                         else endDo
 
@@ -792,17 +817,17 @@ insertEvent event ht switcher = do
                              onClicked btnCancelar $ do widgetDestroy bEditWindow
 
                              endDo
-
+    
+    --Ao clicar no botão "X", o evento correspondente é excluído.
     btnExcluir <- getButton bLinhaEvento "btnExcluir"
     onClicked btnExcluir $ do widgetDestroy newEvento
-                              --Adicionar aqui o evento para remover o EVENT do csv.
                               b <- containerGetChildren categoriesBox
                               _ <- deleteEventFromFile nName
                               if Prelude.length b == 0
                                 then do page <- getFixed categoriaBuilderRef "mainFixed"
                                         widgetDestroy page
                                         putStrLn ("Evento " ++ nName ++ " e categoria "++ nCategory ++ " removidos com sucesso.")
-                                        --Adicionar aqui o evento para remover a CATEGORIA do csv.
+                                        deleteCategoryFromFile nCategory
                                         endDo
                                 else putStrLn ("Evento " ++ nName ++ " removido com sucesso.")
     -------------------------------------------------------------
@@ -812,6 +837,7 @@ insertEvent event ht switcher = do
 
     endDo
 
+--Ajusta o combobox de cores de acordo com o tipo selecionado (escondendo ou não o botão de cor e o spinbox).
 adjustComboBox :: ColorSrc -> ComboBox -> ColorButton -> SpinButton -> IO ()
 adjustComboBox (Gradient k) box cb sb = do
     comboBoxSetActive box 1
@@ -832,6 +858,7 @@ adjustComboBox (Custom k)   box cb sb = do
     widgetHide sb
     widgetShow cb
 
+--Dado um textBox, seu nome e uma string, esta string é inserida no textBox.
 setTextBoxText :: Builder -> String -> String -> IO ()
 setTextBoxText builder txtbox texto = do
     textBox <- builderGetObject builder castToEntry txtbox
@@ -839,50 +866,57 @@ setTextBoxText builder txtbox texto = do
     endDo
 
 --A primeira string corresponde ao nome do label e a segunda, ao novo texto que o label terá.
+--Logo, insere um dado texto em uma dada label.
 setLabelText :: Builder -> String -> String -> IO ()
 setLabelText builder lbl lblText = do
     label <- getLabel builder lbl
     labelSetText label lblText
     endDo
 
+--Retorna a referência de um spin dado o builder que o contém e seu nome correspondente no widget.
 getSpin :: Builder -> String -> IO SpinButton
 getSpin b s = do
     builderGetObject b castToSpinButton s
 
+--Retorna a referência de um action dado o builder que o contém e seu nome correspondente no widget.
 getAction :: Builder -> String -> IO Action
 getAction b s = do
     builderGetObject b castToAction s
 
+--Retorna a referência de um vertical box dado o builder que o contém e seu nome correspondente no widget.
 getVerticalBox :: Builder -> String -> IO VBox
 getVerticalBox b s = do
     builderGetObject b castToVBox s
 
+--Retorna a referência de um "fixed" (janela) dado o builder que o contém e seu nome correspondente no widget.
 getFixed :: Builder -> String -> IO Fixed
 getFixed b s = do
     builderGetObject b castToFixed s
 
+--Retorna a referência de uma label dado o builder que a contém e seu nome correspondente no widget.
 getLabel :: Builder -> String -> IO Label
 getLabel b s = do
     builderGetObject b castToLabel s
 
+--Retorna a referência de uma textBox dado o builder que a contém e seu nome correspondente no widget.
 getTextBox :: Builder -> String -> IO Entry
 getTextBox b s = do
     builderGetObject b castToEntry s
 
---Realiza um cast para capturar um determinado botão de um certo builder.
+--Retorna a referência de um botão dado o builder que o contém e seu nome correspondente no widget.
 getButton :: Builder -> String -> IO Button
 getButton b s = do
     builderGetObject b castToButton s
 
-
 --Cria um builder para um terminado .glade e retorna seu monad.
+--O builder serve para que as referências dos objetos que constituem o widget possam ser capturadas.
 makeBuilder :: String -> IO Builder
 makeBuilder s = do
     builder <- builderNew
     builderAddFromFile builder s
     return builder
 
---Cria uma janela para adicionar 
+--Cria uma janela para adicionar um evento. 
 createEvent :: Builder -> IO Dialog
 createEvent b = do
 
@@ -890,10 +924,13 @@ createEvent b = do
     novoEvento   <- builderGetObject b castToDialog "newEventWindow"
     calendario   <- builderGetObject b castToCalendar "calendar"
     hoje         <- getToday
+
+    --Inicializa o calendário com a data de hoje.
     --O calendar possui meses de 0 a 11. Por isso o -1 do getMonth.
     calendarSelectMonth calendario (getMonth hoje - 1) (getYear hoje)
     calendarSelectDay calendario (getDay hoje)
-
+    
+    --Inicializa as informações de cores.
     colorButton  <- builderGetObject b castToColorButton "colorbutton1"
     colorType    <- builderGetObject b castToComboBox "combobox1"
     spinGradient <- getSpin b "spin_urg"
@@ -901,7 +938,8 @@ createEvent b = do
     comboBoxSetActive colorType 1
     comboBoxSetActive colorType 0
     widgetHide colorButton
-
+    
+    --Caso o tipo de coloração do combobox seja alterado, exibe ou não as caixas extras pertinentes.
     on colorType changed $ do selectedColorType <- comboBoxGetActive colorType
                               if selectedColorType == 2
                                 then widgetShow colorButton
