@@ -48,7 +48,7 @@ deleteEventFromFile    :: String -> IO (Either String ())
 
 deleteAdtByField :: Eq field => (adt -> field) -> field -> [adt] -> [adt]
 
-mkPrefs :: Bool -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
+mkPrefs    :: Bool -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
 mkCategory :: Text -> Text -> Category
 mkEvent    :: Text -> Int -> Int -> Int -> Text -> Text -> Bool -> ColorSrc -> Event
 
@@ -61,7 +61,9 @@ filterHasDesc      :: [Event] -> [Event]
 filterIsReg        :: [Event] -> [Event]
 
 sortEventsBy :: String -> [Event] -> [Event]
-sortEventsBy method es
+
+findCatColor :: [Category] -> String -> String
+gradient     :: Int -> Int -> Color
 
 ##################################################################################################
 -}
@@ -165,7 +167,7 @@ data Event =
   deriving (Eq, Show)
 
 -- ADT que indica a fonte de onde o evento recebe sua cor quando mostrado na GUI. O usuário poderá optar por dar uma cor especifca para um evento apenas, ele poderá deixar o evento com a mesma cor da categoria que ele pertence, ou deixar para a cor ser ajustada automaticamente conforme a data se aproxima.
-data ColorSrc = Custom Text | CatName | Gradient deriving (Eq, Show)
+data ColorSrc = Custom Text | CatName | Gradient Int deriving (Eq, Show)
 
 instance FromNamedRecord Prefs where
   parseNamedRecord m =
@@ -208,7 +210,9 @@ instance FromField Bool where
 -- Usado para o Cassava saber como ler o que esta escrito no CSV e transformar no meu ADT de Cor. Se a string que estiver nesse campo não for 'Category' nem 'Gradient, ela sera um código, que sera transferido para minha cor Custom.
 instance FromField ColorSrc where
   parseField "Category" = pure CatName
-  parseField "Gradient" = pure Gradient
+  parseField "1"        = pure $ Gradient 1
+  parseField "2"        = pure $ Gradient 2
+  parseField "3"        = pure $ Gradient 3
   parseField othertype  = Custom <$> parseField othertype
 
 -- Para o Cassava codificar o ADT para csv, é necessário que o ADT seja uma instancia de ToNamedRecord (ToRecord sem Header).
@@ -256,9 +260,9 @@ instance ToField Bool where
 
 -- Instancia para o cassava saber como transformar a string que leu no CSV para o Adt do haskell
 instance ToField ColorSrc where
-  toField Gradient      = "Gradient"
-  toField CatName       = "Category"
-  toField (Custom text) = toField text
+  toField (Gradient urgency) = toField urgency
+  toField CatName            = "Category"
+  toField (Custom text)      = toField text
 
 -- Diz para o Cassava a ordem padrão do header de Prefs
 instance DefaultOrdered Prefs where
@@ -584,10 +588,26 @@ findCatColor cs n = head color
 
 -- Função para Quando o Evento deve receber uma cor automaticamente conforme a data se aproxima.
 -- Recebe a quantidade de dias até a data e retorna uma cor em função dela
-gradient :: Int -> Color
-gradient x = Color red green blue
+gradient :: Int -> Int -> Color
+gradient x urgency = Color red green blue
   where
-    speed = 1200
-    red   = read $ show $ max 8000  (45000 - (x * 2 * speed))
-    green = read $ show $ min 30000 (8000  + (x * speed))
-    blue  = read $ show $ min 17500 (8000  + (x * (speed `div` 2)))
+    -- Speed com que o gradiente muda depende da urgencia.
+    -- Com urgencia 1, o gradiente alcança o máximo em   7 dias
+    -- Com urgencia 2, o gradiente alcança o máximo em  31 dias
+    -- Com urgencia 3, o gradiente alcança o máximo em 365 dias
+    speed  = 10571
+    speed2 =  2387
+    speed3 =   203
+    red = case urgency of
+      3 -> read $ show $ max 8000  (45000 - (x * (speed3 `div` 2)))
+      2 -> read $ show $ max 8000  (45000 - (x * (speed2 `div` 2)))
+      _ -> read $ show $ max 8000  (45000 - (x * (speed  `div` 2)))
+    green = case urgency of
+      1 -> read $ show $ min 30000 (8000  + (x * speed3))
+      2 -> read $ show $ min 30000 (8000  + (x * speed2))
+      _ -> read $ show $ min 30000 (8000  + (x * speed))
+
+    blue = case urgency of
+      3 -> read $ show $ min 17500 (8000  + (x * (speed3 `div` 4)))
+      2 -> read $ show $ min 17500 (8000  + (x * (speed2 `div` 4)))
+      _ -> read $ show $ min 17500 (8000  + (x * (speed  `div` 4)))
