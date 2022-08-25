@@ -36,138 +36,6 @@ printHash ht s = do
     putStrLn $ if x == Nothing then "Nothing" else "teste"
 --}
 
---Devolve um monad de lista de Events do atual filtro salvo.
-getCurrentFilteredList :: IO [Event]
-getCurrentFilteredList = do
-    prefs  <- getPrefs
-    events <- getEvents
-    filteredList events prefs
-
-filteredList :: [Event] -> Prefs -> IO [Event]
-filteredList events prefs = do
-    let f      = defaultFilter      prefs
-    let f_nome = pack $ defaultFilterName prefs
-    let f_dia  = defaultFilterDay   prefs
-    let f_mes  = defaultFilterMonth prefs
-    let f_ano  = defaultFilterYear  prefs
-    case f of
-        1 -> return $ filterEventsByCat  f_nome events
-        2 -> return $ filterEventName    f_nome events
-        3 -> return $ filterCloseEvents  f_dia f_mes f_ano events
-        4 -> return $ filterDistantEvets f_dia f_mes f_ano events
-        5 -> return $ filterIsReg events
-        6 -> getEvents
-        _ -> getEvents
-
-savePrefFilter :: Int -> String -> Int -> Int -> Int -> IO ()
-savePrefFilter n s d m y = do
-    prefs <- getPrefs
-    let p_ad = autodelete prefs
-    let p_ds = defaultSort prefs
-    savePrefs (Prefs p_ad p_ds n s d m y)
-    endDo
-
-saveAutodelete :: Bool -> IO ()
-saveAutodelete b = do
-    prefs <- getPrefs
-    let p_df = defaultFilter prefs
-    let p_ds = defaultSort prefs
-    let p_fn = defaultFilterName prefs
-    let p_fd = defaultFilterDay prefs
-    let p_fm = defaultFilterMonth prefs
-    let p_fy = defaultFilterYear prefs
-    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
-    if b then removeExpiredEvents else endDo
-
-removeExpiredEvents :: IO ()
-removeExpiredEvents = do
-    events <- getEvents
-    hoje <- getToday
-    let k = [x | x <- events, daysleft x hoje >= 0] --Cria uma lista com todos os eventos com data negativa.
-    print k
-    encodeToFile eventPath k
-    endDo
-
-savePrefSort :: Int -> IO ()
-savePrefSort n = do
-    prefs <- getPrefs
-    let p_ad = autodelete prefs
-    let p_df = defaultFilter prefs
-    let p_fn = defaultFilterName prefs
-    let p_fd = defaultFilterDay prefs
-    let p_fm = defaultFilterMonth prefs
-    let p_fy = defaultFilterYear prefs
-    savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
-    endDo
-
-getAutodelete :: IO Bool
-getAutodelete = do
-    autodelete <$> getPrefs
-
-getSortedList :: [Event] -> IO [Event]
-getSortedList es = do
-    prefs <- getPrefs
-    let n = defaultSort prefs
-    case n of
-        1 -> return $ sortEventsBy "name" es
-        2 -> return $ sortEventsBy "date" es
-        3 -> return $ sortEventsBy "description" es
-        4 -> return $ sortEventsBy "recurrent" es
-        5 -> return es
-        _ -> return es
-
-getProcessedList :: IO [Event]
-getProcessedList = do
-    l <- getCurrentFilteredList
-    getSortedList l
-
-
-setAutodeleteLabel :: Builder -> IO()
-setAutodeleteLabel builder = do
-    prefs <- getPrefs
-    let b = autodelete prefs
-    setLabelText builder "lbl_AutoDelete" ("Autodeletar datas atingidas: " ++ show b)
-    endDo
-
-setSortLabel :: Builder -> IO ()
-setSortLabel builder = do
-    prefs <- getPrefs
-    let n = defaultSort prefs
-    setLabelText builder "lbl_Sort" ("Ordenação: " ++ getSortByInt n)
-    endDo
-
-getSortByInt :: Int -> String
-getSortByInt n =
-    case n of
-        1 -> "por nome."
-        2 -> "por data."
-        3 -> "por descrição."
-        4 -> "por recorrência."
-        5 -> "default."
-        _ -> ""
-
-setFilterLabel :: Builder -> IO ()
-setFilterLabel builder = do
-    prefs <- getPrefs
-    let n = defaultFilter prefs
-    let p_fn = defaultFilterName prefs
-    let p_fd = defaultFilterDay prefs
-    let p_fm = defaultFilterMonth prefs
-    let p_fy = defaultFilterYear prefs
-    setLabelText builder "lbl_Filter" ("Filtro: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
-    endDo
-
-getFilterByInt :: Int -> String -> Int -> Int -> Int -> String
-getFilterByInt n s x y z=
-    case n of
-        1 -> "por categoria (" ++ s ++ ")."
-        2 -> "por nome (" ++ s ++ ")."
-        3 -> "por eventos anteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
-        4 -> "por evento posteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
-        5 -> "por eventos recorrentes."
-        6 -> "default (sem filtro)."
-        _ -> ""
-
 main :: IO ()
 main = do
     initGUI
@@ -354,12 +222,145 @@ uiGradientTest = do
 
     onValueSpinned spin $ do spinvalue <-spinButtonGetValue spin
                              let v = fromInteger $ truncate spinvalue
-                             widgetModifyBg background StateNormal (gradient v)
+                             widgetModifyBg background StateNormal (gradient v 2)
     widgetShow window
     endDo
 
 endDo :: IO ()
 endDo = do putStr ""
+
+
+--Devolve um monad de lista de Events do atual filtro salvo.
+getCurrentFilteredList :: IO [Event]
+getCurrentFilteredList = do
+    prefs  <- getPrefs
+    events <- getEvents
+    filteredList events prefs
+
+filteredList :: [Event] -> Prefs -> IO [Event]
+filteredList events prefs = do
+    let f      = defaultFilter      prefs
+    let f_nome = pack $ defaultFilterName prefs
+    let f_dia  = defaultFilterDay   prefs
+    let f_mes  = defaultFilterMonth prefs
+    let f_ano  = defaultFilterYear  prefs
+    case f of
+        1 -> return $ filterEventsByCat  f_nome events
+        2 -> return $ filterEventName    f_nome events
+        3 -> return $ filterCloseEvents  f_dia f_mes f_ano events
+        4 -> return $ filterDistantEvets f_dia f_mes f_ano events
+        5 -> return $ filterIsReg events
+        6 -> getEvents
+        _ -> getEvents
+
+savePrefFilter :: Int -> String -> Int -> Int -> Int -> IO ()
+savePrefFilter n s d m y = do
+    prefs <- getPrefs
+    let p_ad = autodelete prefs
+    let p_ds = defaultSort prefs
+    savePrefs (Prefs p_ad p_ds n s d m y)
+    endDo
+
+saveAutodelete :: Bool -> IO ()
+saveAutodelete b = do
+    prefs <- getPrefs
+    let p_df = defaultFilter prefs
+    let p_ds = defaultSort prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
+    if b then removeExpiredEvents else endDo
+
+removeExpiredEvents :: IO ()
+removeExpiredEvents = do
+    events <- getEvents
+    hoje <- getToday
+    let k = [x | x <- events, daysleft x hoje >= 0] --Cria uma lista com todos os eventos com data negativa.
+    print k
+    encodeToFile eventPath k
+    endDo
+
+savePrefSort :: Int -> IO ()
+savePrefSort n = do
+    prefs <- getPrefs
+    let p_ad = autodelete prefs
+    let p_df = defaultFilter prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
+    endDo
+
+getAutodelete :: IO Bool
+getAutodelete = do
+    autodelete <$> getPrefs
+
+getSortedList :: [Event] -> IO [Event]
+getSortedList es = do
+    prefs <- getPrefs
+    let n = defaultSort prefs
+    case n of
+        1 -> return $ sortEventsBy "name" es
+        2 -> return $ sortEventsBy "date" es
+        3 -> return $ sortEventsBy "description" es
+        4 -> return $ sortEventsBy "recurrent" es
+        5 -> return es
+        _ -> return es
+
+getProcessedList :: IO [Event]
+getProcessedList = do
+    l <- getCurrentFilteredList
+    getSortedList l
+
+
+setAutodeleteLabel :: Builder -> IO()
+setAutodeleteLabel builder = do
+    prefs <- getPrefs
+    let b = autodelete prefs
+    setLabelText builder "lbl_AutoDelete" ("Autodeletar datas atingidas: " ++ show b)
+    endDo
+
+setSortLabel :: Builder -> IO ()
+setSortLabel builder = do
+    prefs <- getPrefs
+    let n = defaultSort prefs
+    setLabelText builder "lbl_Sort" ("Ordenação: " ++ getSortByInt n)
+    endDo
+
+getSortByInt :: Int -> String
+getSortByInt n =
+    case n of
+        1 -> "por nome."
+        2 -> "por data."
+        3 -> "por descrição."
+        4 -> "por recorrência."
+        5 -> "default."
+        _ -> ""
+
+setFilterLabel :: Builder -> IO ()
+setFilterLabel builder = do
+    prefs <- getPrefs
+    let n = defaultFilter prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    setLabelText builder "lbl_Filter" ("Filtro: " ++ getFilterByInt n p_fn p_fd p_fm p_fy)
+    endDo
+
+getFilterByInt :: Int -> String -> Int -> Int -> Int -> String
+getFilterByInt n s x y z=
+    case n of
+        1 -> "por categoria (" ++ s ++ ")."
+        2 -> "por nome (" ++ s ++ ")."
+        3 -> "por eventos anteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
+        4 -> "por evento posteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
+        5 -> "por eventos recorrentes."
+        6 -> "default (sem filtro)."
+        _ -> ""
 
 --Int corresponde ao tipo de filtro. 1 filtra eventos mais próximos, 2 filtra eventos mais distantes.
 createFilterDialogDate :: Int -> HashTable String Builder -> Notebook -> IO ()
@@ -459,16 +460,33 @@ createCategory s ht parent = do
     H.insert ht s categoryBuilder
     notebookAppendPage parent fixedBox s
 
+    categoriesList <- getCategories
+    if catExistsCSV s categoriesList 
+        then do color <- stringToColor (findCatColor categoriesList s)
+                colorButtonSetColor colorButton color
+                widgetModifyBg background StateNormal color
+                widgetModifyBg background' StateNormal color
+                endDo
+        else do
+            insertCategory (Category (pack s) (pack "0 0 0"))
+            endDo
+
 
     onColorSet colorButton $ do color <- colorButtonGetColor colorButton
-                                convertedColor <- colorToString color
+                                deleteCategoryFromFile s
+                                colorName <- colorToString color
+                                insertCategory $ Category (pack s) (pack colorName)
                                 widgetModifyBg background StateNormal color
                                 widgetModifyBg background' StateNormal color
-                                deleteCategoryFromFile s
-                                insertCategory $ mkCategory (pack s) (pack convertedColor)
+                                loadTable <- getProcessedList
+                                refreshEvents loadTable ht parent
                                 endDo
 
     return categoryBuilder
+
+catExistsCSV :: String -> [Category] -> Bool
+catExistsCSV _ []      = False
+catExistsCSV s (x: xs) = (catName x == pack s) || catExistsCSV s xs
 
 --Converte os campos da color para uma tripla com os respectivos valores da cor.
 colorToString :: Color -> IO String
@@ -477,7 +495,7 @@ colorToString (Color a b c) = do
 
 --Converte uma tripla de strings para uma estrutura de cor.
 stringToColor :: String -> IO Color
-stringToColor s = do 
+stringToColor s = do
     let [a, b, c] = Data.String.words s
     return $ Color (read a) (read b) (read c)
 
@@ -553,8 +571,19 @@ toEventForm builder = do
     eRecurrent   <- builderGetObject builder castToToggleButton "recurrentCheckbox"
     isRecurrent  <- toggleButtonGetActive eRecurrent
     eRegularity  <- getSpin builder "regularity"
-    vRegularity <- spinButtonGetValue eRegularity
+    vRegularity  <- spinButtonGetValue eRegularity
+    colorType    <- builderGetObject builder castToComboBox "combobox1"
+    vColorType   <- comboBoxGetActive colorType
+    colorUrg     <- getSpin builder "spin_urg"
+    vColorUrg    <- spinButtonGetValue colorUrg
+    btnColor     <- builderGetObject builder castToColorButton "colorbutton1"
+    vBtnColor    <- colorButtonGetColor btnColor
+
+    let urg      = fromInteger $ truncate vColorUrg
     let valueRec = fromInteger $ truncate vRegularity
+    color'       <- colorToString vBtnColor
+    let color    = switchOnColor vColorType color' urg
+    print vColorType
 
     -- Calendar settings.
     eCalendar    <- builderGetObject builder castToCalendar "calendar"
@@ -566,10 +595,14 @@ toEventForm builder = do
 
     --Adicionar aqui as outras variáveis.
     --Month tem um retorno de 0 a 11. Logo foi ajustado para 1 a 12.
-    return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) isRecurrent valueRec CatName
+    return $ Item (pack eName) eDay (eMonth+1) eYear (pack eDescription) (pack eCategory) isRecurrent valueRec color
 
--- createDescFilterDialog :: [Event] -> IO ()
--- createFilterDialog es = do
+switchOnColor :: Int -> String -> Int -> ColorSrc
+switchOnColor n s k = case n of
+    0 -> Gradient k
+    1 -> CatName
+    2 -> Custom (pack s)
+    _ -> Gradient k
 
 
 --Retorna o dia, mês ou ano dependendo do parâmetro passado. 0 => dia, 1 => mês, 2 => ano.
@@ -630,6 +663,14 @@ insertFromTable (x:xs) ht switcher = do
                     Main.insertEvent x ht switcher
                     insertFromTable xs ht switcher
 
+
+getBackgroundColor :: Int -> ColorSrc -> String -> [Category] -> IO Color
+getBackgroundColor _ CatName s cs       = stringToColor (findCatColor cs s)
+getBackgroundColor x (Gradient k)   _ _ = return $ gradient x k
+getBackgroundColor _ (Custom s) _ _     = stringToColor (unpack s)
+
+
+
 --Pega um evento e, através do seu campo de categoria, pega a referência do builder do widget correspondente.
 --Chame este evento para adicionar um Event a uma dada categoria.
 insertEvent :: Event -> HashTable String Builder -> Notebook -> IO ()
@@ -643,7 +684,7 @@ insertEvent event ht switcher = do
     let nDescription = unpack $ description event
     let nRecurrent   = recurrent event
     let nRegularity  = regularity  event
-    let nColor       = Category --Alterar color depois.
+    let nColor       = color event
 
     -------------------------------------------------------------------
     categoriaBuilderRef <- getCategory nCategory ht --Pega o builder da categoria.
@@ -653,13 +694,6 @@ insertEvent event ht switcher = do
     bLinhaEvento <- makeBuilder "./ui/UI_Evento.glade"
     newEvento    <- getFixed bLinhaEvento "fixedMain"
 
-    frame <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
-    frame' <- builderGetObject bLinhaEvento castToViewport "viewport1"
-
-    widgetModifyBg frame StateNormal (Color 65535 0 0)
-    let v = 100 :: Int
-    widgetModifyBg frame' StateNormal (Color (65535 - read (show v) *100) 0 0)
-
     --Ajuste das labels: preenche nome do evento, descrição, dia da semana, data e tempo restante.
     setLabelText bLinhaEvento "lblEvent" (nName ++ (if nRecurrent then " (recorrente: a cada " ++ show nRegularity  ++ " dias)" else ""))
     setLabelText bLinhaEvento "lblDay" (show nDay ++ " de " ++ getMonthName nMonth ++ " de " ++ show nYear)
@@ -668,6 +702,16 @@ insertEvent event ht switcher = do
     hoje <- getToday
     setLabelText bLinhaEvento "lblTimeRemaining" (show (daysleft event hoje) ++ " dias")
 
+    categoryList <- getCategories
+
+    --Ajusta a cor de fundo
+    newColor <- getBackgroundColor (daysleft event hoje) nColor nCategory categoryList
+    bg1 <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
+    bg2 <- builderGetObject bLinhaEvento castToViewport "viewport1"
+
+    widgetModifyBg bg1 StateNormal newColor
+    widgetModifyBg bg2 StateNormal newColor
+
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
     onClicked btnEditar $ do bEdit <- makeBuilder "./ui/UI_editarEvento.glade"
@@ -675,7 +719,24 @@ insertEvent event ht switcher = do
                              setTextBoxText bEdit "txtBoxEvent" nName
                              setTextBoxText bEdit "txtBoxDescription" nDescription
                              setTextBoxText bEdit "txtBoxCategory" nCategory
+                             calendario   <- builderGetObject bEdit castToCalendar "calendar"
+                             calendarSelectDay calendario nDay
+                             calendarSelectMonth calendario nMonth nYear
                              widgetShow bEditWindow
+                             colorButton  <- builderGetObject bEdit castToColorButton "colorbutton1"
+                             colorType    <- builderGetObject bEdit castToComboBox "combobox1"
+                             spinGradient <- getSpin bEdit "spin_urg"
+                             comboBoxSetActive colorType 1
+                             comboBoxSetActive colorType 0
+                             widgetHide colorButton
+
+                             on colorType changed $ do selectedColorType <- comboBoxGetActive colorType
+                                                       if selectedColorType == 2
+                                                        then widgetShow colorButton
+                                                        else widgetHide colorButton
+                                                       if selectedColorType == 1
+                                                        then widgetShow spinGradient
+                                                        else widgetHide spinGradient
 
                              btnEdit <- getButton bEdit "btnEditar"
                              onClicked btnEdit $ do deleteEventFromFile nName
@@ -780,6 +841,21 @@ createEvent b = do
     --O calendar possui meses de 0 a 11. Por isso o -1 do getMonth.
     calendarSelectMonth calendario (getMonth hoje - 1) (getYear hoje)
     calendarSelectDay calendario (getDay hoje)
+
+    colorButton  <- builderGetObject b castToColorButton "colorbutton1"
+    colorType    <- builderGetObject b castToComboBox "combobox1"
+    spinGradient <- getSpin b "spin_urg"
+    comboBoxSetActive colorType 1
+    comboBoxSetActive colorType 0
+    widgetHide colorButton
+
+    on colorType changed $ do selectedColorType <- comboBoxGetActive colorType
+                              if selectedColorType == 2
+                                then widgetShow colorButton
+                                else widgetHide colorButton
+                              if selectedColorType == 1
+                                then widgetShow spinGradient
+                                else widgetHide spinGradient
 
     -- CANCEL   ##################################################################
     -- Remove a janela de adição do novo evento. Quit.
