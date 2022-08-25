@@ -598,12 +598,13 @@ gradient x urgency = Color red green blue
     speed  = 10571
     speed2 =  2387
     speed3 =   203
+    -- Max e min usados para ter um 'cap' nos valores e o gradiente não resetar
     red = case urgency of
       3 -> read $ show $ max 8000  (45000 - (x * (speed3 `div` 2)))
       2 -> read $ show $ max 8000  (45000 - (x * (speed2 `div` 2)))
       _ -> read $ show $ max 8000  (45000 - (x * (speed  `div` 2)))
     green = case urgency of
-      1 -> read $ show $ min 30000 (8000  + (x * speed3))
+      3 -> read $ show $ min 30000 (8000  + (x * speed3))
       2 -> read $ show $ min 30000 (8000  + (x * speed2))
       _ -> read $ show $ min 30000 (8000  + (x * speed))
 
