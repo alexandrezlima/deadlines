@@ -98,13 +98,16 @@ main = do
                                bRegularity <- builderGetObject bdAdd castToHPaned "regularityPanel"
                                onClicked confirm $ do notValid <- checkFields bdAdd
                                                       if notValid
-                                                        then generateWarningMessage "Preencha todos os campos."
+                                                        then generateWarningMessage "Preencha os campos 'Evento' e 'Categoria' ."
                                                         else do
-                                                            addEvent builderMain bdAdd switcher categoriesMap
-                                                            updatedList <- getProcessedList
-                                                            refreshEvents updatedList categoriesMap switcher
-                                                            widgetDestroy newEvent
-                                                            endDo
+                                                            existsEv <- eventExists bdAdd
+                                                            if not existsEv
+                                                                then do
+                                                                    addEvent builderMain bdAdd switcher categoriesMap
+                                                                    updatedList <- getProcessedList
+                                                                    refreshEvents updatedList categoriesMap switcher
+                                                                    widgetDestroy newEvent
+                                                                else generateWarningMessage $ "Evento já existente."
                                onClicked bRecurrent $ do isVisible <- widgetGetVisible bRegularity
                                                          if isVisible then widgetHide bRegularity  else widgetShow bRegularity
                                                          endDo
@@ -152,28 +155,25 @@ main = do
 
     -- Filtrar por categoria
     action_filter_category <- getAction builderMain "Action_Filtro_Categoria"
-    onActionActivate action_filter_category $ do createFilterDialogText 1 categoriesMap switcher
-                                                 setFilterLabel builderMain
+    onActionActivate action_filter_category $ do createFilterDialogText 1 categoriesMap switcher builderMain
 
     -- Filtrar por nome do evento
     action_filter_name <- getAction builderMain "Action_Filtro_Nome"
-    onActionActivate action_filter_name $ do createFilterDialogText 2 categoriesMap switcher
-                                             setFilterLabel builderMain
+    onActionActivate action_filter_name $ do createFilterDialogText 2 categoriesMap switcher builderMain
 
     -- Filtrar por evento mais próximo
     action_filter_closer <- getAction builderMain "Action_Filtro_MaisProx"
-    onActionActivate action_filter_closer $ do createFilterDialogDate 1 categoriesMap switcher
-                                               setFilterLabel builderMain
+    onActionActivate action_filter_closer $ do createFilterDialogDate 1 categoriesMap switcher builderMain
 
     -- Filtrar por evento mais distante
     action_filter_further <- getAction builderMain "Action_Filtro_MaisDist"
-    onActionActivate action_filter_further $ do createFilterDialogDate 2 categoriesMap switcher
-                                                setFilterLabel builderMain
+    onActionActivate action_filter_further $ do createFilterDialogDate 2 categoriesMap switcher builderMain
 
     -- Filtrar eventos que possuem descrição
     action_filter_description <- getAction builderMain "Action_Filtro_Desc"
     onActionActivate action_filter_description $ do updatedTable <- getEvents
                                                     refreshEvents (filterHasDesc updatedTable) categoriesMap switcher
+                                                    savePrefFilter 7 "" 0 0 0
                                                     setFilterLabel builderMain
 
     -- Filtrar eventos que são recorrentes
@@ -199,6 +199,7 @@ main = do
 
     action_autodelete <- getAction builderMain "action_Autodelete"
     onActionActivate action_autodelete $ do autodel <- getAutodelete
+                                            print autodel
                                             saveAutodelete (not autodel)
                                             updatedList <- getProcessedList
                                             refreshEvents updatedList categoriesMap switcher
@@ -209,7 +210,7 @@ main = do
     --Mostra todos os widgets presentes em window.
     widgetShowAll window
     on window deleteEvent $ liftIO mainQuit >> return False
-    _ <- uiGradientTest
+    --_ <- uiGradientTest
     mainGUI
 
 uiGradientTest :: IO ()
@@ -234,7 +235,9 @@ endDo = do putStr ""
 getCurrentFilteredList :: IO [Event]
 getCurrentFilteredList = do
     prefs  <- getPrefs
+    print prefs
     events <- getEvents
+    print events
     filteredList events prefs
 
 filteredList :: [Event] -> Prefs -> IO [Event]
@@ -256,6 +259,7 @@ filteredList events prefs = do
 savePrefFilter :: Int -> String -> Int -> Int -> Int -> IO ()
 savePrefFilter n s d m y = do
     prefs <- getPrefs
+    print prefs
     let p_ad = autodelete prefs
     let p_ds = defaultSort prefs
     savePrefs (Prefs p_ad p_ds n s d m y)
@@ -270,6 +274,7 @@ saveAutodelete b = do
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
+    print prefs
     savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
     if b then removeExpiredEvents else endDo
 
@@ -291,6 +296,7 @@ savePrefSort n = do
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
+    print prefs
     savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
     endDo
 
@@ -301,6 +307,7 @@ getAutodelete = do
 getSortedList :: [Event] -> IO [Event]
 getSortedList es = do
     prefs <- getPrefs
+    print prefs
     let n = defaultSort prefs
     case n of
         1 -> return $ sortEventsBy "name" es
@@ -319,6 +326,7 @@ getProcessedList = do
 setAutodeleteLabel :: Builder -> IO()
 setAutodeleteLabel builder = do
     prefs <- getPrefs
+    print prefs
     let b = autodelete prefs
     setLabelText builder "lbl_AutoDelete" ("Autodeletar datas atingidas: " ++ show b)
     endDo
@@ -326,6 +334,7 @@ setAutodeleteLabel builder = do
 setSortLabel :: Builder -> IO ()
 setSortLabel builder = do
     prefs <- getPrefs
+    print prefs
     let n = defaultSort prefs
     setLabelText builder "lbl_Sort" ("Ordenação: " ++ getSortByInt n)
     endDo
@@ -338,11 +347,13 @@ getSortByInt n =
         3 -> "por descrição."
         4 -> "por recorrência."
         5 -> "default."
+        6 -> "por categoria."
         _ -> ""
 
 setFilterLabel :: Builder -> IO ()
 setFilterLabel builder = do
     prefs <- getPrefs
+    print prefs
     let n = defaultFilter prefs
     let p_fn = defaultFilterName prefs
     let p_fd = defaultFilterDay prefs
@@ -360,11 +371,12 @@ getFilterByInt n s x y z=
         4 -> "por evento posteriores à data " ++ show x ++ "/" ++ show y ++ "/" ++ show z ++ "."
         5 -> "por eventos recorrentes."
         6 -> "default (sem filtro)."
+        7 -> "por eventos que possuem descrição."
         _ -> ""
 
 --Int corresponde ao tipo de filtro. 1 filtra eventos mais próximos, 2 filtra eventos mais distantes.
-createFilterDialogDate :: Int -> HashTable String Builder -> Notebook -> IO ()
-createFilterDialogDate n ht switcher = do
+createFilterDialogDate :: Int -> HashTable String Builder -> Notebook -> Builder -> IO ()
+createFilterDialogDate n ht switcher builderMain = do
     builder <- makeBuilder "./ui/UI_FilterDialogDate.glade"
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
@@ -373,6 +385,9 @@ createFilterDialogDate n ht switcher = do
     dia' <- getSpin builder "spin_dia"
     mes' <- getSpin builder "spin_mes"
     ano' <- getSpin builder "spin_ano"
+
+    prefs <-getPrefs
+    print prefs
 
     if n == 1
         then setLabelText builder "lblTitulo" "Filtrar eventos anteriores a: "
@@ -395,6 +410,7 @@ createFilterDialogDate n ht switcher = do
                                     else do
                                         refreshEvents (filterDistantEvets vDia' vMes' vAno' updatedTable) ht switcher
                                         savePrefFilter 4 "" vDia' vMes' vAno'
+                                setFilterLabel builderMain
                                 widgetDestroy window
 
 
@@ -403,8 +419,8 @@ createFilterDialogDate n ht switcher = do
 
 
 --Int corresponde ao tipo de filtro. 1 filtra categoria, 2 filtra nome.
-createFilterDialogText :: Int -> HashTable String Builder -> Notebook -> IO ()
-createFilterDialogText n ht switcher = do
+createFilterDialogText :: Int -> HashTable String Builder -> Notebook -> Builder -> IO ()
+createFilterDialogText n ht switcher builderMain = do
     builder <- makeBuilder "./ui/UI_FilterDialog.glade"
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
@@ -413,6 +429,9 @@ createFilterDialogText n ht switcher = do
     if n == 1
         then setLabelText builder "lblTitulo" "Categoria:"
         else setLabelText builder "lblTitulo" "Eventos que contém o seguinte texto:"
+
+    prefs <- getPrefs
+    print prefs
 
     --Botão cancelar.
     onClicked btnCancelar $ do widgetDestroy window
@@ -426,6 +445,7 @@ createFilterDialogText n ht switcher = do
                                     else do
                                         refreshEvents (filterEventName   (pack text) updatedTable) ht switcher
                                         savePrefFilter 2 text 0 0 0
+                                setFilterLabel builderMain
                                 widgetDestroy window
 
 
@@ -461,7 +481,7 @@ createCategory s ht parent = do
     notebookAppendPage parent fixedBox s
 
     categoriesList <- getCategories
-    if catExistsCSV s categoriesList 
+    if catExistsCSV s categoriesList
         then do color <- stringToColor (findCatColor categoriesList s)
                 colorButtonSetColor colorButton color
                 widgetModifyBg background StateNormal color
@@ -537,6 +557,17 @@ checkFields bEvent = do
     category       <- entryGetText categoryBox
     return $ name == "" || category == ""
 
+eventExists :: Builder -> IO Bool
+eventExists bdAdd = do
+    nameBox <- getTextBox bdAdd "txtBoxEvent"
+    nome    <- entryGetText nameBox
+    checkEvent nome <$> getEvents
+
+checkEvent :: String -> [Event] -> Bool
+checkEvent s []     = False
+checkEvent s (x:xs) = b || checkEvent s xs
+    where
+        b = s == unpack (name x)
 
 --Esta função deve receber:
 --  O builder do createEvent, que é de onde serão capturados os textos inseridos pelo usuário nas text box.
@@ -721,21 +752,22 @@ insertEvent event ht switcher = do
                              setTextBoxText bEdit "txtBoxCategory" nCategory
                              calendario   <- builderGetObject bEdit castToCalendar "calendar"
                              calendarSelectDay calendario nDay
-                             calendarSelectMonth calendario nMonth nYear
+                             calendarSelectMonth calendario (nMonth-1) nYear
                              widgetShow bEditWindow
                              colorButton  <- builderGetObject bEdit castToColorButton "colorbutton1"
                              colorType    <- builderGetObject bEdit castToComboBox "combobox1"
                              spinGradient <- getSpin bEdit "spin_urg"
-                             comboBoxSetActive colorType 1
-                             comboBoxSetActive colorType 0
-                             widgetHide colorButton
+
+                             adjustComboBox nColor colorType colorButton spinGradient
 
                              on colorType changed $ do selectedColorType <- comboBoxGetActive colorType
                                                        if selectedColorType == 2
                                                         then widgetShow colorButton
                                                         else widgetHide colorButton
-                                                       if selectedColorType == 1
-                                                        then widgetShow spinGradient
+                                                       if selectedColorType == 0
+                                                        then do
+                                                            widgetShow spinGradient
+                                                            spinButtonSetValue spinGradient 1
                                                         else widgetHide spinGradient
 
                              btnEdit <- getButton bEdit "btnEditar"
@@ -743,6 +775,7 @@ insertEvent event ht switcher = do
                                                     editedEvent <- toEventForm bEdit
                                                     Lib.insertEvent editedEvent
                                                     updatedList <- getProcessedList
+                                                    print updatedList
                                                     refreshEvents updatedList ht switcher
                                                     widgetDestroy bEditWindow
                                                     b <- containerGetChildren categoriesBox
@@ -779,6 +812,25 @@ insertEvent event ht switcher = do
 
     endDo
 
+adjustComboBox :: ColorSrc -> ComboBox -> ColorButton -> SpinButton -> IO ()
+adjustComboBox (Gradient k) box cb sb = do
+    comboBoxSetActive box 1
+    comboBoxSetActive box 0
+    spinButtonSetValue sb $ read (show k)
+    widgetShow sb
+    widgetHide cb
+adjustComboBox CatName      box cb sb = do
+    comboBoxSetActive box 0
+    comboBoxSetActive box 1
+    widgetHide sb
+    widgetHide cb
+adjustComboBox (Custom k)   box cb sb = do
+    comboBoxSetActive box 0
+    comboBoxSetActive box 2
+    color <- stringToColor (unpack k)
+    colorButtonSetColor cb color
+    widgetHide sb
+    widgetShow cb
 
 setTextBoxText :: Builder -> String -> String -> IO ()
 setTextBoxText builder txtbox texto = do
@@ -845,6 +897,7 @@ createEvent b = do
     colorButton  <- builderGetObject b castToColorButton "colorbutton1"
     colorType    <- builderGetObject b castToComboBox "combobox1"
     spinGradient <- getSpin b "spin_urg"
+    spinButtonSetValue spinGradient 1
     comboBoxSetActive colorType 1
     comboBoxSetActive colorType 0
     widgetHide colorButton
@@ -853,7 +906,7 @@ createEvent b = do
                               if selectedColorType == 2
                                 then widgetShow colorButton
                                 else widgetHide colorButton
-                              if selectedColorType == 1
+                              if selectedColorType == 0
                                 then widgetShow spinGradient
                                 else widgetHide spinGradient
 

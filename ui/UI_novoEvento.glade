@@ -7710,6 +7710,11 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="tooltip_text" translatable="yes">Urgência: 
+
+1 - Muito urgente
+2 - Urgência intermediária
+3 - Pouco urgente</property>
                     <property name="title" translatable="yes">Escolha uma cor</property>
                     <property name="color">#000000000000</property>
                   </object>
