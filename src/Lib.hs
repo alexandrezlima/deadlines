@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- TODO: Cores na GUI; Prefs de campos pra visualizar
 
 {-
 ##################################################################################################
@@ -110,8 +109,7 @@ import qualified Data.Vector as Vector
 import Data.Either (fromRight)
 
 import Data.Time.Clock    (getCurrentTime, UTCTime(utctDay))
-import Data.Time.Calendar (diffDays, fromGregorian, toGregorian)
-import Data.Word (Word16)
+import Data.Time.Calendar (diffDays, addDays, fromGregorian, toGregorian)
 
 prefsPath :: FilePath
 prefsPath = "./csv/prefs.csv"
@@ -132,6 +130,7 @@ getToday = getCurrentTime >>= return . toGregorian . utctDay
 data Prefs =
   Prefs
     { autodelete         :: Bool
+    , lastCategoryTab    :: Text
     , defaultSort        :: Int
     , defaultFilter      :: Int
     , defaultFilterName  :: String
@@ -173,6 +172,7 @@ instance FromNamedRecord Prefs where
   parseNamedRecord m =
     Prefs
       <$> m .: "autodelete"
+      <*> m .: "lastCategoryTab"
       <*> m .: "defaultSort"
       <*> m .: "defaultFilter"
       <*> m .: "defaultFilterName"
@@ -222,6 +222,7 @@ instance ToNamedRecord Prefs where
     Cassava.namedRecord
     -- noCSV       .= noADT
     [ "autodelete"         .= autodelete
+    , "lastCategoryTab"    .= lastCategoryTab
     , "defaultSort"        .= defaultSort
     , "defaultFilter"      .= defaultFilter
     , "defaultFilterName"  .= defaultFilterName
@@ -269,6 +270,7 @@ instance DefaultOrdered Prefs where
   headerOrder _ =
     Cassava.header
       [ "autodelete"
+      , "lastCategoryTab"
       , "defaultSort"
       , "defaultFilter"
       , "defaultFilterName"
@@ -302,7 +304,7 @@ instance DefaultOrdered Event where
 
 -- Header que deveria ser usado caso o ADT não fosse uma instancia de DefaultOrdered 
 prefsHeader :: Header
-prefsHeader = Vector.fromList ["autodelete", "defaultSort", "defaultFilter", "defaultFilterName", "defaultFilterDay", "defaultFilterMonth", "defaultFilterYear"]
+prefsHeader = Vector.fromList ["autodelete", "lastCategoryTab", "defaultSort", "defaultFilter", "defaultFilterName", "defaultFilterDay", "defaultFilterMonth", "defaultFilterYear"]
 
 -- Tem que por aqui o que estiver escrito no CSV, é a primeira linha do arquivo
 categoryHeader :: Header
@@ -312,8 +314,8 @@ categoryHeader = Vector.fromList ["catname", "catcolor"]
 eventHeader :: Header
 eventHeader = Vector.fromList ["name", "day", "month", "year", "description", "category", "recurrent", "regularity", "color"]
 
-mkPrefs :: Bool -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
-mkPrefs ad ds df dfn dfd dfm dfy = Prefs {autodelete = ad, defaultSort = ds, defaultFilter = df, defaultFilterName = dfn, defaultFilterDay = dfd, defaultFilterMonth = dfm, defaultFilterYear = dfy}
+mkPrefs :: Bool -> Text -> Int -> Int -> String -> Int -> Int -> Int -> Prefs
+mkPrefs ad lct ds df dfn dfd dfm dfy = Prefs {autodelete = ad, lastCategoryTab = lct, defaultSort = ds, defaultFilter = df, defaultFilterName = dfn, defaultFilterDay = dfd, defaultFilterMonth = dfm, defaultFilterYear = dfy}
 
 mkCategory :: Text -> Text -> Category
 mkCategory n c = Category {catName = n, catColor = c}
@@ -363,7 +365,7 @@ catchShowIO action =
 getPrefs :: IO Prefs
 getPrefs = do
   (ty, tm, td) <- getToday
-  prefvec <- fmap (Foldable.toList . fromRight (Vector.singleton (Prefs False 5 6 "" (fromInteger ty) tm td))) decodePrefsFromFile
+  prefvec <- fmap (Foldable.toList . fromRight (Vector.singleton (Prefs False "" 5 6 "" (fromInteger ty) tm td))) decodePrefsFromFile
   return $ head prefvec
 
 -- Função que, apos executar a leitra dos registros, transforma o Vector que é retornado em uma lista com as categorias criadas
@@ -373,9 +375,29 @@ getCategories = do fmap (Foldable.toList . fromRight Vector.empty) decodeCategor
 
 -- Função que, apos executar a leitra dos registros, transforma o Vector que é retornado em uma lista
 -- Se o arquivo não for encontrado, é retornada uma lista vazia
+-- A função também atualiza a data de Eventos regulares que já tiverem passado
 -- Foldable.toList transforma o Vector em []
 getEvents :: IO [Event]
-getEvents = do fmap (Foldable.toList . fromRight Vector.empty) decodeEventsFromFile
+getEvents = do
+  (ty, tm, td) <- getToday
+  es <- fmap (Foldable.toList . fromRight Vector.empty) decodeEventsFromFile
+  let nes = updateEvents es (ty, tm, td)
+  print nes
+  _ <- encodeToFile eventPath nes
+  return nes
+
+-- Atualiza a data dos Eventos regulares que já tiverem passado para que a data mostrada na GUI seja a de sua próxima ocorrência,
+-- não a de uma ocorrência passada
+updateEvents :: [Event] -> (Integer, Int, Int)-> [Event]
+updateEvents [] _ = []
+updateEvents (e:es) (ty, tm, td)
+ | recurrent e = mkEvent (name e) nd nm (fromInteger ny) (description e) (category e) (recurrent e) (regularity e) (color e) : updateEvents es (ty, tm, td)
+ | otherwise = e : updateEvents es (ty, tm, td)
+ where
+  -- Calculo o novo dia
+  ndate = addDays (toInteger $ daysleft e (ty, tm, td)) (fromGregorian ty tm td)
+  -- Separo o dia calculado em dia, mes e ano
+  (ny, nm, nd) = toGregorian ndate
 
 savePrefs :: Prefs -> IO (Either String ())
 savePrefs prefs = encodeToFile prefsPath [prefs]
