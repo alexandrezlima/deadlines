@@ -121,7 +121,7 @@ main = do
                                            refreshEvents (sortEventsBy "description" updatedList) categoriesMap switcher
                                            savePrefSort 3
                                            setSortLabel builderMain
-    
+
     -- Ordenar por recorrência
     action_sort_rec <- getAction builderMain "ordenar_Recorrencia"
     onActionActivate action_sort_rec $ do updatedList <- getCurrentFilteredList
@@ -186,7 +186,7 @@ main = do
     action_sair <- getAction builderMain "action_Sair"
     onActionActivate action_sair $ do liftIO mainQuit >> return False
                                       endDo
-    
+
     --Botão "autodelete". Faz com que o autodelete seja ativado ou desativado (exclui eventos cuja data está expirada).
     action_autodelete <- getAction builderMain "action_Autodelete"
     onActionActivate action_autodelete $ do autodel <- getAutodelete
@@ -243,8 +243,9 @@ savePrefFilter n s d m y = do
     prefs <- getPrefs
     print prefs
     let p_ad = autodelete prefs
+    let p_lt = lastCategoryTab prefs
     let p_ds = defaultSort prefs
-    savePrefs (Prefs p_ad p_ds n s d m y)
+    savePrefs (Prefs p_ad p_lt p_ds n s d m y)
     endDo
 
 --Salva no CSV "Prefs" qual é a ordenação atualmente selecionada.
@@ -253,13 +254,14 @@ savePrefSort :: Int -> IO ()
 savePrefSort n = do
     prefs <- getPrefs
     let p_ad = autodelete prefs
+    let p_lt = lastCategoryTab prefs
     let p_df = defaultFilter prefs
     let p_fn = defaultFilterName prefs
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
     print prefs
-    savePrefs (Prefs p_ad n p_df p_fn p_fd p_fm p_fy)
+    savePrefs (Prefs p_ad p_lt n p_df p_fn p_fd p_fm p_fy)
     endDo
 
 --Salva no CSV "Prefs" a opção "Autodelete", podendo ela ser true ou false (parâmetro "b").
@@ -267,13 +269,14 @@ saveAutodelete :: Bool -> IO ()
 saveAutodelete b = do
     prefs <- getPrefs
     let p_df = defaultFilter prefs
+    let p_lt = lastCategoryTab prefs
     let p_ds = defaultSort prefs
     let p_fn = defaultFilterName prefs
     let p_fd = defaultFilterDay prefs
     let p_fm = defaultFilterMonth prefs
     let p_fy = defaultFilterYear prefs
     print prefs
-    savePrefs (Prefs b p_ds p_df p_fn p_fd p_fm p_fy)
+    savePrefs (Prefs b p_lt p_ds p_df p_fn p_fd p_fm p_fy)
     if b then removeExpiredEvents else endDo
 
 --Pega a lista de eventos cuja data limite não foi expirada e sobrescreve no CSV de eventos.
@@ -380,7 +383,7 @@ createFilterDialogDate n ht switcher builderMain = do
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
     btnConfirmar <- getButton builder "btn_confirmar"
-    
+
     --Cria as referências dos spins.
     dia' <- getSpin builder "spin_dia"
     mes' <- getSpin builder "spin_mes"
@@ -388,7 +391,7 @@ createFilterDialogDate n ht switcher builderMain = do
 
     prefs <-getPrefs
     print prefs
-    
+
     --Define a label baseado no tipo de filtro.
     if n == 1
         then setLabelText builder "lblTitulo" "Filtrar eventos anteriores a: "
@@ -396,7 +399,7 @@ createFilterDialogDate n ht switcher builderMain = do
 
     --Botão cancelar, fecha a janela.
     onClicked btnCancelar $ do widgetDestroy window
-    
+
     --Aplica o filtro baseado na data escolhida.
     onClicked btnConfirmar $ do updatedTable <- getEvents
                                 vDia <- spinButtonGetValue dia'
@@ -419,6 +422,30 @@ createFilterDialogDate n ht switcher builderMain = do
     widgetShow window
     endDo
 
+
+--Salva o nome da última categoria aberta.
+saveLastTabPref :: String -> IO ()
+saveLastTabPref s = do
+    prefs <- getPrefs
+    let b    = autodelete prefs
+    let p_df = defaultFilter prefs
+    let p_lt = pack s
+    let p_ds = defaultSort prefs
+    let p_fn = defaultFilterName prefs
+    let p_fd = defaultFilterDay prefs
+    let p_fm = defaultFilterMonth prefs
+    let p_fy = defaultFilterYear prefs
+    print prefs
+    savePrefs (Prefs b p_lt p_ds p_df p_fn p_fd p_fm p_fy)
+    endDo
+
+--Carrega o nome da última categoria aberta.
+getLastTabPref :: IO String
+getLastTabPref = do
+    (unpack . lastCategoryTab) <$> getPrefs
+
+
+
 --Cria uma janela para escolher o nome do evento ou da categoria.
 --Int corresponde ao tipo de filtro. 1 filtra categoria, 2 filtra nome.
 createFilterDialogText :: Int -> HashTable String Builder -> Notebook -> Builder -> IO ()
@@ -427,7 +454,7 @@ createFilterDialogText n ht switcher builderMain = do
     window <- builderGetObject builder castToDialog "mainDialog"
     btnCancelar  <- getButton builder "btn_cancelar"
     btnConfirmar <- getButton builder "btn_confirmar"
-    
+
     --Atualiza o label com o tipo de filtro correspondente.
     if n == 1
         then setLabelText builder "lblTitulo" "Categoria:"
@@ -438,7 +465,7 @@ createFilterDialogText n ht switcher builderMain = do
 
     --Botão cancelar. Fecha a janela.
     onClicked btnCancelar $ do widgetDestroy window
-    
+
     --Botão confirmar, pega o texto inserido no campo e aplica o filtro correspondente (por categoria ou por nome do evento).
     onClicked btnConfirmar $ do text <- getTextFromEntry builder "filterText"
                                 updatedTable <- getEvents
@@ -460,6 +487,16 @@ createFilterDialogText n ht switcher builderMain = do
 refreshEvents :: [Event] -> HashTable String Builder -> Notebook -> IO ()
 refreshEvents es ht switcher = do
     --inserção de evento para salvar a aba.
+    currentPage <- notebookGetCurrentPage switcher
+    maybePage <- notebookGetNthPage switcher currentPage
+    case maybePage of
+        Nothing  -> saveLastTabPref ""
+        (Just x) -> do
+            ctg <- notebookGetTabLabelText switcher x
+            case ctg:: Maybe String of
+                Nothing -> saveLastTabPref ""
+                Just k  -> saveLastTabPref k
+     
     ht <- makeHashTable --Recria a hashtable
     children <- containerGetChildren switcher
     clearSwitcher children
@@ -484,9 +521,13 @@ createCategory s ht parent = do
     background      <- builderGetObject categoryBuilder castToEventBox "eventbox1"
     background'     <- builderGetObject categoryBuilder castToViewport "viewport1"
     labelSetText lblCategory s
-    H.insert ht s categoryBuilder
-    notebookAppendPage parent fixedBox s
     
+
+    currentPageRef  <- notebookGetNthPage parent 0
+
+    H.insert ht s categoryBuilder
+    notebookPrependPage parent fixedBox s
+
     --Verifica se uma dada categoria existe. Se sim, adiciona a cor salva.
     categoriesList <- getCategories
     if catExistsCSV s categoriesList
@@ -511,6 +552,22 @@ createCategory s ht parent = do
                                 loadTable <- getProcessedList
                                 refreshEvents loadTable ht parent
                                 endDo
+
+    prefs <- getPrefs
+    let savedPage = unpack $ lastCategoryTab prefs
+
+
+    case currentPageRef of
+        Nothing -> return categoryBuilder
+        Just k  -> do
+            if savedPage == s
+                then do 
+                    notebookReorderChild parent k 0
+                    notebookSetCurrentPage parent 0
+                    return categoryBuilder
+                else
+                    return categoryBuilder
+    
     return categoryBuilder
 
 --Dada uma string indicando o nome de uma categoria, devolve se essa categoria existe ou não.
@@ -782,6 +839,26 @@ insertEvent event ht switcher = do
                              colorButton  <- builderGetObject bEdit castToColorButton "colorbutton1"
                              colorType    <- builderGetObject bEdit castToComboBox "combobox1"
                              spinGradient <- getSpin bEdit "spin_urg"
+                             spinRecurrency <- getSpin bEdit "regularity"
+                             spinButtonSetValue spinRecurrency $ read (show nRegularity)
+                             recurrentBox <- builderGetObject bEdit castToToggleButton "recurrentCheckbox"
+                             regularityP  <- builderGetObject bEdit castToHPaned "regularityPanel"
+
+
+                             if nRecurrent
+                                then do
+                                    toggleButtonSetActive recurrentBox True
+                                    widgetShow regularityP
+                                else do
+                                    toggleButtonSetActive recurrentBox False
+                                    widgetHide regularityP
+
+                             onClicked recurrentBox $ do isVisible <- widgetGetVisible regularityP
+                                                         if isVisible then widgetHide regularityP  else widgetShow regularityP
+                                                         endDo
+
+
+
 
                              adjustComboBox nColor colorType colorButton spinGradient
 
@@ -817,7 +894,7 @@ insertEvent event ht switcher = do
                              onClicked btnCancelar $ do widgetDestroy bEditWindow
 
                              endDo
-    
+
     --Ao clicar no botão "X", o evento correspondente é excluído.
     btnExcluir <- getButton bLinhaEvento "btnExcluir"
     onClicked btnExcluir $ do widgetDestroy newEvento
@@ -929,7 +1006,7 @@ createEvent b = do
     --O calendar possui meses de 0 a 11. Por isso o -1 do getMonth.
     calendarSelectMonth calendario (getMonth hoje - 1) (getYear hoje)
     calendarSelectDay calendario (getDay hoje)
-    
+
     --Inicializa as informações de cores.
     colorButton  <- builderGetObject b castToColorButton "colorbutton1"
     colorType    <- builderGetObject b castToComboBox "combobox1"
@@ -938,7 +1015,7 @@ createEvent b = do
     comboBoxSetActive colorType 1
     comboBoxSetActive colorType 0
     widgetHide colorButton
-    
+
     --Caso o tipo de coloração do combobox seja alterado, exibe ou não as caixas extras pertinentes.
     on colorType changed $ do selectedColorType <- comboBoxGetActive colorType
                               if selectedColorType == 2
