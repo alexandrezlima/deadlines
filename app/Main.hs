@@ -521,9 +521,6 @@ createCategory s ht parent = do
     background      <- builderGetObject categoryBuilder castToEventBox "eventbox1"
     background'     <- builderGetObject categoryBuilder castToViewport "viewport1"
     labelSetText lblCategory s
-    
-
-    currentPageRef  <- notebookGetNthPage parent 0
 
     H.insert ht s categoryBuilder
     notebookPrependPage parent fixedBox s
@@ -553,22 +550,31 @@ createCategory s ht parent = do
                                 refreshEvents loadTable ht parent
                                 endDo
 
+    --Captura qual o nome da última categoria salva.
     prefs <- getPrefs
     let savedPage = unpack $ lastCategoryTab prefs
 
-
-    case currentPageRef of
-        Nothing -> return categoryBuilder
-        Just k  -> do
-            if savedPage == s
-                then do 
-                    notebookReorderChild parent k 0
-                    notebookSetCurrentPage parent 0
-                    return categoryBuilder
-                else
-                    return categoryBuilder
+    --Captura quantas páginas parent possui.
+    childrenCount <- notebookGetNPages parent
+    
+    --Faz uma busca pela tab.
+    findAndSetSwitcher parent (childrenCount-1) savedPage
     
     return categoryBuilder
+
+findAndSetSwitcher :: Notebook -> Int -> String -> IO ()
+findAndSetSwitcher n 0 _ = notebookSetCurrentPage n 0
+findAndSetSwitcher n x s = do
+    maybePage <- notebookGetNthPage n x
+    case maybePage of
+        Nothing  -> notebookSetCurrentPage n 0
+        (Just t) -> do
+            ctg <- notebookGetTabLabelText n t
+            case ctg:: Maybe String of
+                Nothing -> notebookSetCurrentPage n 0
+                Just k  -> if k == s 
+                    then notebookSetCurrentPage n x
+                    else findAndSetSwitcher n (x-1) s
 
 --Dada uma string indicando o nome de uma categoria, devolve se essa categoria existe ou não.
 catExistsCSV :: String -> [Category] -> Bool
