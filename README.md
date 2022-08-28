@@ -19,4 +19,27 @@ Referências:
 - https://www.muitovar.com/EddyAhmed/GladeGtk2Hs.html
 - https://archives.haskell.org/projects.haskell.org/gtk2hs/docs/tutorial/glade/
 - https://caiorss.github.io/Functional-Programming/haskell/GUI_Graphical_User_Interface_GTK.html
+
+# COLABORADORES
+
+<table>
+  <td align="center">
+      <a href="https://github.com/tiago-simionato">
+        <img src="https://github.com/tiago-simionato.png" width="100px;"/><br>
+        <sub>
+          <b> Tiago Simionato</b>
+        </sub>
+      </a>
+      <p>11201810899</p>
+    </td>
+    <td align="center">
+      <a href="https://github.com/AleeZL">
+        <img src="https://github.com/AleeZL.png" width="100px;"/><br>
+        <sub>
+          <b>Alexandre Lima</b>
+        </sub>        
+      </a>
+      <p>11201720542</p>
+    </td>
+</table>
       
