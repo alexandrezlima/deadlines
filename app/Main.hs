@@ -819,14 +819,27 @@ insertEvent event ht switcher = do
     hoje <- getToday
     setLabelText bLinhaEvento "lblTimeRemaining" (show (daysleft event hoje) ++ " dias")
 
-    categoryList <- getCategories
+    
+    categoryList   <- getCategories
+    let bCatExists = catExistsCSV nCategory categoryList
 
-    --Ajusta a cor de fundo
-    newColor <- getBackgroundColor (daysleft event hoje) nColor nCategory categoryList
-    bg1 <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
-    bg2 <- builderGetObject bLinhaEvento castToViewport "viewport1"
-    widgetModifyBg bg1 StateNormal newColor
-    widgetModifyBg bg2 StateNormal newColor
+    if bCatExists 
+        then do
+            --Ajusta a cor de fundo
+            newColor <- getBackgroundColor (daysleft event hoje) nColor nCategory categoryList
+            bg1 <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
+            bg2 <- builderGetObject bLinhaEvento castToViewport "viewport1"
+            widgetModifyBg bg1 StateNormal newColor
+            widgetModifyBg bg2 StateNormal newColor
+        else do
+            insertCategory (Category (pack nCategory) (pack "0 0 0"))
+            let sColor = (Color 0 0 0)
+            bg1 <- builderGetObject bLinhaEvento castToEventBox "eventbox1"
+            bg2 <- builderGetObject bLinhaEvento castToViewport "viewport1"
+            widgetModifyBg bg1 StateNormal sColor
+            widgetModifyBg bg2 StateNormal sColor
+            endDo
+            
 
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
