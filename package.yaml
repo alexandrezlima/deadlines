@@ -27,6 +27,7 @@ dependencies:
 - vector
 - bytestring
 - hashtables
+- time
 
 library:
   source-dirs: src
