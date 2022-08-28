@@ -13,12 +13,15 @@ Projeto desenvolvido na linguagem funcional Haskell para disciplina de Paradigma
 
         $ stack run
         
-Referências:
+# REFERÊNCIAS
 - https://hackage.haskell.org/package/hashtables
 - https://hackage.haskell.org/package/gtk3-0.13.6
 - https://www.muitovar.com/EddyAhmed/GladeGtk2Hs.html
 - https://archives.haskell.org/projects.haskell.org/gtk2hs/docs/tutorial/glade/
 - https://caiorss.github.io/Functional-Programming/haskell/GUI_Graphical_User_Interface_GTK.html
+
+#VÍDEO DE APRESENTAÇÃO
+https://youtu.be/7ULOamWIEjc
 
 # COLABORADORES
 
