@@ -496,7 +496,7 @@ refreshEvents es ht switcher = do
             case ctg:: Maybe String of
                 Nothing -> saveLastTabPref ""
                 Just k  -> saveLastTabPref k
-     
+
     ht <- makeHashTable --Recria a hashtable
     children <- containerGetChildren switcher
     clearSwitcher children
@@ -556,10 +556,10 @@ createCategory s ht parent = do
 
     --Captura quantas páginas parent possui.
     childrenCount <- notebookGetNPages parent
-    
+
     --Faz uma busca pela tab.
     findAndSetSwitcher parent (childrenCount-1) savedPage
-    
+
     return categoryBuilder
 
 findAndSetSwitcher :: Notebook -> Int -> String -> IO ()
@@ -572,7 +572,7 @@ findAndSetSwitcher n x s = do
             ctg <- notebookGetTabLabelText n t
             case ctg:: Maybe String of
                 Nothing -> notebookSetCurrentPage n 0
-                Just k  -> if k == s 
+                Just k  -> if k == s
                     then notebookSetCurrentPage n x
                     else findAndSetSwitcher n (x-1) s
 
@@ -819,11 +819,11 @@ insertEvent event ht switcher = do
     hoje <- getToday
     setLabelText bLinhaEvento "lblTimeRemaining" (show (daysleft event hoje) ++ " dias")
 
-    
+
     categoryList   <- getCategories
     let bCatExists = catExistsCSV nCategory categoryList
 
-    if bCatExists 
+    if bCatExists
         then do
             --Ajusta a cor de fundo
             newColor <- getBackgroundColor (daysleft event hoje) nColor nCategory categoryList
@@ -839,7 +839,7 @@ insertEvent event ht switcher = do
             widgetModifyBg bg1 StateNormal sColor
             widgetModifyBg bg2 StateNormal sColor
             endDo
-            
+
 
     --BOTÕES ----------------------------------------------------
     btnEditar <- getButton bLinhaEvento "btnEditar"
@@ -901,7 +901,11 @@ insertEvent event ht switcher = do
                                                     widgetDestroy bEditWindow
                                                     b <- containerGetChildren categoriesBox
 
-                                                    if Prelude.length b == 0
+                                                    let categoriesevents = filterEventsByCat (pack nCategory) updatedList
+
+
+
+                                                    if Prelude.null categoriesevents
                                                         then do page <- getFixed categoriaBuilderRef "mainFixed"
                                                                 widgetDestroy page
                                                                 deleteCategoryFromFile nCategory
