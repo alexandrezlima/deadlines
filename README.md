@@ -20,7 +20,7 @@ Projeto desenvolvido na linguagem funcional Haskell para disciplina de Paradigma
 - https://archives.haskell.org/projects.haskell.org/gtk2hs/docs/tutorial/glade/
 - https://caiorss.github.io/Functional-Programming/haskell/GUI_Graphical_User_Interface_GTK.html
 
-#VÍDEO DE APRESENTAÇÃO
+# VÍDEO DE APRESENTAÇÃO
 https://youtu.be/7ULOamWIEjc
 
 # COLABORADORES
