@@ -27,7 +27,7 @@ https://youtu.be/7ULOamWIEjc
 
 <table>
   <td align="center">
-      <a href="https://github.com/tiago-simionato">
+      <a href="https://github.com/tiagosimionato">
         <img src="https://github.com/tiago-simionato.png" width="100px;"/><br>
         <sub>
           <b> Tiago Simionato</b>
